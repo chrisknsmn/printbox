@@ -101,6 +101,21 @@ function createBoundingGrid(settings: {
   return grid;
 }
 
+// Add CSS styles for button animations
+const buttonStyles = `
+  @keyframes ripple {
+    to {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+  
+  .grid-button:active .ripple-effect {
+    transform: scale(1);
+    animation: ripple 0.5s linear;
+  }
+`;
+
 export default function ThreeScene() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -292,11 +307,11 @@ export default function ThreeScene() {
           visible: newVisible
         }));
         
-        // Update the menu option
-        const updatedOptions = [...menuOptions];
-        const gridOption = updatedOptions.find(opt => opt.id === 'grid');
+        // Update the menu option immediately
+        const updatedOptions = JSON.parse(JSON.stringify(menuOptions)) as MenuOption[];
+        const gridOption = updatedOptions.find((opt: MenuOption) => opt.id === 'grid');
         if (gridOption && gridOption.children) {
-          const showOption = gridOption.children.find(child => child.id === 'grid-show');
+          const showOption = gridOption.children.find((child: MenuOption) => child.id === 'grid-show');
           if (showOption) {
             showOption.label = newVisible ? 'Hide' : 'Show';
           }
@@ -315,7 +330,7 @@ export default function ThreeScene() {
         const nextIndex = (currentIndex + 1) % colors.length;
         const newColor = colors[nextIndex];
         
-        // Update material color
+        // Update material color immediately
         material.color.setHex(newColor);
         
         // Update state
@@ -518,6 +533,8 @@ export default function ThreeScene() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Add style tag for button animations */}
+      <style dangerouslySetInnerHTML={{ __html: buttonStyles }} />
       {statusMessage && (
         <div style={{
           position: 'absolute',
@@ -752,24 +769,115 @@ export default function ThreeScene() {
                 Grid
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
-                {menuOptions[1].children?.map(gridOpt => (
-                  <button
-                    key={gridOpt.id}
-                    onClick={() => handleMenuOptionClick(gridOpt.id)}
-                    style={{
-                      backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      borderRadius: '3px',
-                      color: 'white',
-                      padding: '4px 8px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      flex: '1'
-                    }}
-                  >
-                    {gridOpt.label}
-                  </button>
-                ))}
+                {/* Show/Hide Grid Button - Direct implementation */}
+                <button
+                  className="grid-button"
+                  onClick={() => {
+                    // Direct toggle of grid visibility
+                    if (gridRef.current) {
+                      const newVisible = !gridRef.current.visible;
+                      gridRef.current.visible = newVisible;
+                      
+                      // Update state
+                      setGridSettings(prev => ({
+                        ...prev,
+                        visible: newVisible
+                      }));
+                      
+                      // Update menu option label directly
+                      const updatedOptions = JSON.parse(JSON.stringify(menuOptions)) as MenuOption[];
+                      const gridOption = updatedOptions.find((opt: MenuOption) => opt.id === 'grid');
+                      if (gridOption && gridOption.children) {
+                        const showOption = gridOption.children.find((child: MenuOption) => child.id === 'grid-show');
+                        if (showOption) {
+                          showOption.label = newVisible ? 'Hide' : 'Show';
+                        }
+                      }
+                      setMenuOptions(updatedOptions);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: gridSettings.visible ? 'rgba(74, 158, 255, 0.3)' : 'rgba(60, 60, 60, 0.8)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '3px',
+                    color: gridSettings.visible ? '#4a9eff' : 'white',
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    flex: '1',
+                    transition: 'all 0.2s ease-in-out',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <span style={{ position: 'relative', zIndex: 2 }}>
+                    {gridSettings.visible ? 'Hide' : 'Show'}
+                  </span>
+                  <span className="ripple-effect" style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    transform: 'scale(0)',
+                    transition: 'transform 0.3s',
+                    borderRadius: '3px',
+                    zIndex: 1
+                  }} />
+                </button>
+                
+                {/* Color Button - Direct implementation */}
+                <button
+                  className="grid-button"
+                  onClick={() => {
+                    // Direct color change
+                    if (gridRef.current) {
+                      const material = gridRef.current.material as THREE.LineBasicMaterial;
+                      const colors = [0x888888, 0x444444, 0xaaaaaa, 0x0088ff];
+                      const currentColorHex = material.color.getHex();
+                      const currentIndex = colors.indexOf(currentColorHex);
+                      const nextIndex = (currentIndex + 1) % colors.length;
+                      const newColor = colors[nextIndex];
+                      
+                      // Update material color immediately
+                      material.color.setHex(newColor);
+                      
+                      // Update state
+                      setGridSettings(prev => ({
+                        ...prev,
+                        color: newColor
+                      }));
+                    }
+                  }}
+                  style={{
+                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '3px',
+                    color: 'white',
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    flex: '1',
+                    transition: 'all 0.2s ease-in-out',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <span style={{ position: 'relative', zIndex: 2 }}>Color</span>
+                  <span className="ripple-effect" style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    transform: 'scale(0)',
+                    transition: 'transform 0.3s',
+                    borderRadius: '3px',
+                    zIndex: 1
+                  }} />
+                </button>
               </div>
             </div>
           </div>
