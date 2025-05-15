@@ -1,19 +1,17 @@
 import Scene3DWrapper from './components/Scene3DWrapper';
+import Image from 'next/image';
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-2xl font-bold">PrintBox</h1>
-        <p className="text-sm">3D Printing Assistant</p>
+    <div className="flex flex-col h-screen w-screen">
+      <header className="p-4 shadow-md flex gap-4 items-center">
+        <Image src="/logo.svg" alt="Logo" width={50} height={50} className="h-[30px] w-auto" />
       </header>
-      
-      <main className="flex-grow">
+      <main className="flex-1 overflow-hidden">
         <Scene3DWrapper />
       </main>
-      
-      <footer className="bg-gray-100 p-4 text-center text-gray-600 text-sm">
-        <p>PrintBox - A 3D Printing Web Application</p>
+      <footer className="p-2 text-center text-sm">
+      <p>PrintBox {new Date().getFullYear()}</p>
       </footer>
     </div>
   );
