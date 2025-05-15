@@ -149,8 +149,8 @@ export default function ThreeScene() {
     width: 100, // mm (X axis)
     length: 100, // mm (Z axis)
     height: 50, // mm (Y axis)
-    horizontalDivisions: 10,
-    verticalDivisions: 2,
+    horizontalDivisions: 2,
+    verticalDivisions: 1,
     visible: true,
     color: 0x888888
   });
@@ -360,7 +360,7 @@ export default function ThreeScene() {
         0.1,
         5000 // Extended far plane to prevent clipping when zoomed out
       );
-      camera.position.set(3, 3, 4);
+      camera.position.set(100, 100, 100);
       camera.lookAt(0, 0, 0);
       
       // Store camera reference for menu controls
