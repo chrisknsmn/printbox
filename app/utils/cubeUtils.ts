@@ -8,13 +8,15 @@ import * as THREE from 'three';
  * @param width Width of the box
  * @param height Height of the box
  * @param depth Depth of the box
+ * @param wallThickness Optional wall thickness in mm (defaults to 5% of smallest dimension)
  * @returns THREE.Group containing the box mesh
  */
-export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number) {
+export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number) {
   const group = new THREE.Group();
   
-  // Calculate wall thickness based on the smallest dimension
-  const thickness = Math.min(width, height, depth) * 0.05;
+  // Calculate wall thickness based on the smallest dimension or use provided value
+  const calculatedThickness = Math.min(width, height, depth) * 0.05;
+  const thickness = wallThickness !== undefined ? wallThickness : calculatedThickness;
   
   // Check if any dimension exceeds the standard printer bed size (200mm)
   const PRINTER_BED_SIZE = 200; // Standard printer bed size in mm

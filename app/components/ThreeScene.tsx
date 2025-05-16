@@ -21,6 +21,7 @@ interface GridSettings {
   visible: boolean;
   color: number;
   bufferSize: number; // Buffer size in mm between cells
+  wallThickness: number; // Wall thickness in mm
 }
 
 function createBoundingGrid(settings: GridSettings) {
@@ -86,7 +87,7 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
     group.remove(child);
   }
   
-  const { width, length, height, horizontalDivisions, verticalDivisions, bufferSize } = settings;
+  const { width, length, height, horizontalDivisions, verticalDivisions, bufferSize, wallThickness } = settings;
   const createdBoxes: THREE.Object3D[] = [];
   
   const xCellSize = width / horizontalDivisions;
@@ -113,7 +114,7 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
         
         // Use the createBox function with separate width, height, and depth
         // This allows the height to be as tall as possible when cell size changes
-        const box = createBox(xPos, yPos, zPos, boxWidth, boxHeight, boxDepth);
+        const box = createBox(xPos, yPos, zPos, boxWidth, boxHeight, boxDepth, wallThickness);
         
         // Add to group and track
         group.add(box);
@@ -142,13 +143,14 @@ export default function ThreeScene() {
     width: 100, length: 100, height: 50,
     horizontalDivisions: 2, verticalDivisions: 1,
     visible: true, color: 0x888888,
-    bufferSize: 1 // Default 1mm buffer
+    bufferSize: 1, // Default 1mm buffer
+    wallThickness: 2 // Default 2mm wall thickness (minimum allowed)
   });
   
   const [inputs, setInputs] = useState({
     width: '100', length: '100', height: '50',
     horizontalDivisions: '2', verticalDivisions: '1',
-    bufferSize: '1'
+    bufferSize: '1', wallThickness: '2'
   });
   
   // Menu options
@@ -227,6 +229,13 @@ export default function ThreeScene() {
       } else if (numValue > 20) {
         snappedValue = '20';
       }
+    } else if (property === 'wallThickness') {
+      // Wall thickness: 2mm to 20mm
+      if (numValue < 2) {
+        snappedValue = '2';
+      } else if (numValue > 20) {
+        snappedValue = '20';
+      }
     } else if (property === 'verticalDivisions') {
       // Vertical: 1 to 6
       const intValue = Math.floor(numValue);
@@ -286,6 +295,10 @@ export default function ThreeScene() {
       }
     } else if (property === 'bufferSize') {
       if (validValue < 1 || validValue > 20) {
+        isValid = false;
+      }
+    } else if (property === 'wallThickness') {
+      if (validValue < 2 || validValue > 20) {
         isValid = false;
       }
     } else if (property === 'verticalDivisions') {
@@ -471,20 +484,24 @@ export default function ThreeScene() {
           <div style={{ padding: '12px' }}>
             {/* Dimension inputs */}
             <div style={{ marginBottom: '12px' }}>
-              {['width', 'length', 'height', 'horizontalDivisions', 'verticalDivisions', 'bufferSize'].map(field => (
+              {['width', 'length', 'height', 'horizontalDivisions', 'verticalDivisions', 'bufferSize', 'wallThickness'].map(field => (
                 <div key={field} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <label>
-                    {field === 'bufferSize' ? 'Buffer Size (mm)' : 
-                      field.charAt(0).toUpperCase() + field.slice(1) + 
-                      (field.includes('width') || field.includes('length') || field.includes('height') ? ' (mm)' : '')}
+                    {field === 'bufferSize' ? 'Buffer Size (mm)' :
+                     field === 'wallThickness' ? 'Wall Thickness (mm)' :
+                     field.charAt(0).toUpperCase() + field.slice(1) + 
+                     (field.includes('width') || field.includes('length') || field.includes('height') ? ' (mm)' : '')}
                   </label>
                   <input 
                     type="number" 
                     value={inputs[field as keyof typeof inputs]}
                     onChange={(e) => handleInputChange(e, field as keyof typeof gridSettings)}
                     onBlur={(e) => handleInputBlur(e, field as keyof typeof gridSettings)}
-                    min={field === 'bufferSize' ? '1' : (field.includes('Divisions') ? '1' : '10')}
+                    min={field === 'bufferSize' ? '1' : 
+                         field === 'wallThickness' ? '2' :
+                         (field.includes('Divisions') ? '1' : '10')}
                     max={field === 'bufferSize' ? '20' : 
+                         field === 'wallThickness' ? '20' :
                          (field === 'verticalDivisions' ? '6' : 
                           (field.includes('Divisions') ? '16' : '1000'))}
                     style={{
