@@ -194,7 +194,23 @@ export default function ThreeScene() {
   };
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
-    const value = e.target.value;
+    let value = e.target.value;
+    
+    // Enforce maximum limits
+    if (property.includes('Divisions')) {
+      const numValue = parseInt(value);
+      if (!isNaN(numValue)) {
+        // Different max values for horizontal and vertical divisions
+        if (property === 'verticalDivisions' && numValue > 6) {
+          value = '6';
+          e.target.value = '6';
+        } else if (property === 'horizontalDivisions' && numValue > 16) {
+          value = '16';
+          e.target.value = '16';
+        }
+      }
+    }
+    
     setInputs(prev => ({ ...prev, [property]: value }));
     
     const numValue = parseInt(value);
@@ -373,8 +389,8 @@ export default function ThreeScene() {
                     type="number" 
                     value={inputs[field as keyof typeof inputs]}
                     onChange={(e) => handleInputChange(e, field as keyof typeof gridSettings)}
-                    min={field.includes('Divisions') ? (field === 'verticalDivisions' ? '1' : '2') : '5'}
-                    max={field.includes('Divisions') ? (field === 'verticalDivisions' ? '10' : '50') : '500'}
+                    min={field.includes('Divisions') ? '1' : '5'}
+                    max={field === 'verticalDivisions' ? '6' : (field.includes('Divisions') ? '16' : '500')}
                     style={{
                       width: '70px',
                       backgroundColor: 'rgba(60, 60, 60, 0.8)',
