@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { createBoxGrid } from '../utils/cubeUtils';
+import { createBoxGrid, createBox } from '../utils/cubeUtils';
 
-// Simplified menu option interface
 interface MenuOption {
   id: string;
   label: string;
@@ -13,15 +12,17 @@ interface MenuOption {
   children?: MenuOption[];
 }
 
-// Create a 3D grid with customizable dimensions
-function createBoundingGrid(settings: {
-  width: number,
-  length: number,
-  height: number,
-  horizontalDivisions: number,
-  verticalDivisions: number,
-  color: number
-}) {
+interface GridSettings {
+  width: number;
+  length: number;
+  height: number;
+  horizontalDivisions: number;
+  verticalDivisions: number;
+  visible: boolean;
+  color: number;
+}
+
+function createBoundingGrid(settings: GridSettings) {
   const { width, length, height, horizontalDivisions, verticalDivisions, color } = settings;
   const gridGeometry = new THREE.BufferGeometry();
   const gridMaterial = new THREE.LineBasicMaterial({ color });
@@ -58,14 +59,77 @@ function createBoundingGrid(settings: {
   }
   
   gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  const grid = new THREE.LineSegments(gridGeometry, gridMaterial);
-  return grid;
+  return new THREE.LineSegments(gridGeometry, gridMaterial);
+}
+
+function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
+  // Clear existing cubes first
+  while (group.children.length > 0) {
+    const child = group.children[0];
+    
+    // Use type guards to check if the object is a Mesh with material/geometry
+    if (child instanceof THREE.Mesh) {
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+      
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    }
+    
+    group.remove(child);
+  }
+  
+  const { width, length, height, horizontalDivisions, verticalDivisions } = settings;
+  const createdBoxes: THREE.Object3D[] = [];
+  
+  const xCellSize = width / horizontalDivisions;
+  const zCellSize = length / horizontalDivisions;
+  const yCellSize = height / verticalDivisions;
+  
+  const halfWidth = width / 2;
+  const halfLength = length / 2;
+  
+  // Define buffer in mm
+  const bufferSize = 1; // 1mm buffer on all sides
+  
+  // Create a box for each cell
+  for (let y = 0; y < verticalDivisions; y++) {
+    for (let x = 0; x < horizontalDivisions; x++) {
+      for (let z = 0; z < horizontalDivisions; z++) {
+        // Calculate position for this box
+        const xPos = (x + 0.5) * xCellSize - halfWidth;
+        const yPos = (y + 0.5) * yCellSize;
+        const zPos = (z + 0.5) * zCellSize - halfLength;
+        
+        // Calculate the box dimensions with buffer on all sides
+        // This ensures each box is as large as possible within its cell
+        const boxWidth = xCellSize - 2 * bufferSize;
+        const boxHeight = yCellSize - 2 * bufferSize;
+        const boxDepth = zCellSize - 2 * bufferSize;
+        
+        // Use the createBox function with separate width, height, and depth
+        // This allows the height to be as tall as possible when cell size changes
+        const box = createBox(xPos, yPos, zPos, boxWidth, boxHeight, boxDepth);
+        
+        // Add to group and track
+        group.add(box);
+        createdBoxes.push(box);
+      }
+    }
+  }
+  
+  return createdBoxes;
 }
 
 export default function ThreeScene() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(true);
-  const [activeOption, setActiveOption] = useState<string | null>(null);
   
   // Scene references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -75,23 +139,17 @@ export default function ThreeScene() {
   const cubeRef = useRef<THREE.Group | null>(null);
   const cubesRef = useRef<THREE.Object3D[]>([]);
   
-  // Grid settings
-  const [gridSettings, setGridSettings] = useState({
-    width: 100,
-    length: 100,
-    height: 50,
-    horizontalDivisions: 2,
-    verticalDivisions: 1,
-    visible: true,
-    color: 0x888888
+  // Grid settings and inputs
+  const [gridSettings, setGridSettings] = useState<GridSettings>({
+    width: 100, length: 100, height: 50,
+    horizontalDivisions: 2, verticalDivisions: 1,
+    visible: true, color: 0x888888
   });
   
-  // Input values
-  const [gridWidthInput, setGridWidthInput] = useState(gridSettings.width.toString());
-  const [gridLengthInput, setGridLengthInput] = useState(gridSettings.length.toString());
-  const [gridHeightInput, setGridHeightInput] = useState(gridSettings.height.toString());
-  const [gridHDivInput, setGridHDivInput] = useState(gridSettings.horizontalDivisions.toString());
-  const [gridVDivInput, setGridVDivInput] = useState(gridSettings.verticalDivisions.toString());
+  const [inputs, setInputs] = useState({
+    width: '100', length: '100', height: '50',
+    horizontalDivisions: '2', verticalDivisions: '1'
+  });
   
   // Menu options
   const [menuOptions] = useState<MenuOption[]>([
@@ -107,60 +165,51 @@ export default function ThreeScene() {
     }
   ]);
   
-  // Update grid with new settings
-  const updateGrid = (newSettings: typeof gridSettings) => {
+  const updateGrid = (newSettings: GridSettings) => {
     if (!sceneRef.current || !gridRef.current) return;
     
+    // Clean up old grid
     sceneRef.current.remove(gridRef.current);
+    gridRef.current.geometry.dispose();
+    if (gridRef.current.material instanceof THREE.Material) {
+      gridRef.current.material.dispose();
+    }
+    
+    // Create new grid
     const newGrid = createBoundingGrid(newSettings);
     sceneRef.current.add(newGrid);
     gridRef.current = newGrid;
     setGridSettings(newSettings);
     
-    // Populate grid cells with cubes
-    setTimeout(() => {
-      if (sceneRef.current && cubeRef.current) {
-        populateGridCells();
-      }
-    }, 0);
+    // Update boxes
+    if (sceneRef.current && cubeRef.current) {
+      populateGridCells(newSettings);
+    }
   };
   
-  // Populate grid cells with cubes
-  const populateGridCells = () => {
+  const populateGridCells = (settings: GridSettings = gridSettings) => {
     if (!cubeRef.current) return;
-    const cubes = createBoxGrid(cubeRef.current, gridSettings);
-    cubesRef.current = cubes;
+    // Using our custom implementation instead of external utility
+    cubesRef.current = createCubesForGrid(cubeRef.current, settings);
   };
   
-  // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
     const value = e.target.value;
+    setInputs(prev => ({ ...prev, [property]: value }));
     
-    // Update corresponding input state
-    switch(property) {
-      case 'width': setGridWidthInput(value); break;
-      case 'length': setGridLengthInput(value); break;
-      case 'height': setGridHeightInput(value); break;
-      case 'horizontalDivisions': setGridHDivInput(value); break;
-      case 'verticalDivisions': setGridVDivInput(value); break;
-    }
-    
-    // Update grid
     const numValue = parseInt(value);
     if (!isNaN(numValue) && numValue > 0) {
-      updateGrid({ ...gridSettings, [property]: numValue });
+      const newSettings = { ...gridSettings, [property]: numValue };
+      updateGrid(newSettings);
     }
   };
   
-  // Handle menu option click
   const handleViewOptionClick = (optionId: string) => {
     if (!cameraRef.current || !controlsRef.current) return;
     
-    // Get current distance from camera to target
     const currentDistance = cameraRef.current.position.length();
-    
-    // Set new camera position based on view
     let newPosition;
+    
     switch(optionId) {
       case 'view-front': newPosition = new THREE.Vector3(0, 0, 1); break;
       case 'view-top': newPosition = new THREE.Vector3(0, 1, 0); break; 
@@ -168,38 +217,27 @@ export default function ThreeScene() {
       default: newPosition = new THREE.Vector3(1, 1, 1).normalize(); break;
     }
     
-    // Scale and position camera
     newPosition.multiplyScalar(currentDistance);
     cameraRef.current.position.copy(newPosition);
     cameraRef.current.lookAt(0, 0, 0);
     controlsRef.current.update();
   };
   
-  // Toggle grid visibility
   const toggleGridVisibility = () => {
     if (!gridRef.current) return;
-    
     gridRef.current.visible = !gridRef.current.visible;
-    setGridSettings(prev => ({
-      ...prev,
-      visible: gridRef.current!.visible
-    }));
+    setGridSettings(prev => ({ ...prev, visible: gridRef.current!.visible }));
   };
   
-  // Change grid color
   const changeGridColor = () => {
     if (!gridRef.current) return;
-    
     const material = gridRef.current.material as THREE.LineBasicMaterial;
     const colors = [0x888888, 0x444444, 0xaaaaaa, 0x0088ff];
     const currentColorHex = material.color.getHex();
     const nextIndex = (colors.indexOf(currentColorHex) + 1) % colors.length;
     
     material.color.setHex(colors[nextIndex]);
-    setGridSettings(prev => ({
-      ...prev,
-      color: colors[nextIndex]
-    }));
+    setGridSettings(prev => ({ ...prev, color: colors[nextIndex] }));
   };
 
   useEffect(() => {
@@ -252,9 +290,6 @@ export default function ThreeScene() {
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
     
-    // Add axes helper
-    scene.add(new THREE.AxesHelper(2));
-    
     // Populate grid cells
     populateGridCells();
 
@@ -269,7 +304,6 @@ export default function ThreeScene() {
     // Handle resize
     const handleResize = () => {
       if (!mountRef.current) return;
-      
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -281,6 +315,16 @@ export default function ThreeScene() {
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
+      
+      // Clean up resources
+      if (gridRef.current) {
+        gridRef.current.geometry.dispose();
+        if (gridRef.current.material instanceof THREE.Material) {
+          gridRef.current.material.dispose();
+        }
+      }
+      
+      renderer.dispose();
     };
   }, []);
 
@@ -322,100 +366,25 @@ export default function ThreeScene() {
           <div style={{ padding: '12px' }}>
             {/* Dimension inputs */}
             <div style={{ marginBottom: '12px' }}>
-              {/* Width */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label>Width (mm):</label>
-                <input 
-                  type="number" 
-                  value={gridWidthInput}
-                  onChange={(e) => handleInputChange(e, 'width')}
-                  min="10"
-                  max="500"
-                  style={{
-                    width: '70px',
-                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '4px'
-                  }}
-                />
-              </div>
-              
-              {/* Length */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label>Length (mm):</label>
-                <input 
-                  type="number" 
-                  value={gridLengthInput}
-                  onChange={(e) => handleInputChange(e, 'length')}
-                  min="10"
-                  max="500"
-                  style={{
-                    width: '70px',
-                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '4px'
-                  }}
-                />
-              </div>
-              
-              {/* Height */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label>Height (mm):</label>
-                <input 
-                  type="number" 
-                  value={gridHeightInput}
-                  onChange={(e) => handleInputChange(e, 'height')}
-                  min="5"
-                  max="500"
-                  style={{
-                    width: '70px',
-                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '4px'
-                  }}
-                />
-              </div>
-              
-              {/* Horizontal divisions */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label>Horizontal Cells:</label>
-                <input 
-                  type="number" 
-                  value={gridHDivInput}
-                  onChange={(e) => handleInputChange(e, 'horizontalDivisions')}
-                  min="2"
-                  max="50"
-                  style={{
-                    width: '70px',
-                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '4px'
-                  }}
-                />
-              </div>
-              
-              {/* Vertical divisions */}
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <label>Vertical Cells:</label>
-                <input 
-                  type="number" 
-                  value={gridVDivInput}
-                  onChange={(e) => handleInputChange(e, 'verticalDivisions')}
-                  min="1"
-                  max="10"
-                  style={{
-                    width: '70px',
-                    backgroundColor: 'rgba(60, 60, 60, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '4px'
-                  }}
-                />
-              </div>
+              {['width', 'length', 'height', 'horizontalDivisions', 'verticalDivisions'].map(field => (
+                <div key={field} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label>{field.charAt(0).toUpperCase() + field.slice(1)} {field.includes('width') || field.includes('length') || field.includes('height') ? '(mm)' : ''}:</label>
+                  <input 
+                    type="number" 
+                    value={inputs[field as keyof typeof inputs]}
+                    onChange={(e) => handleInputChange(e, field as keyof typeof gridSettings)}
+                    min={field.includes('Divisions') ? (field === 'verticalDivisions' ? '1' : '2') : '5'}
+                    max={field.includes('Divisions') ? (field === 'verticalDivisions' ? '10' : '50') : '500'}
+                    style={{
+                      width: '70px',
+                      backgroundColor: 'rgba(60, 60, 60, 0.8)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: 'white',
+                      padding: '4px'
+                    }}
+                  />
+                </div>
+              ))}
             </div>
             
             {/* View options */}
@@ -449,7 +418,6 @@ export default function ThreeScene() {
                 Grid
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
-                {/* Show/Hide Button */}
                 <button
                   onClick={toggleGridVisibility}
                   style={{
@@ -462,8 +430,6 @@ export default function ThreeScene() {
                 >
                   {gridSettings.visible ? 'Hide' : 'Show'}
                 </button>
-                
-                {/* Color Button */}
                 <button
                   onClick={changeGridColor}
                   style={{

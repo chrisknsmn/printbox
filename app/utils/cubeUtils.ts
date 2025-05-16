@@ -2,15 +2,19 @@ import * as THREE from 'three';
 
 /**
  * Creates a simple open-top box (cube without top face)
+ * @param x X position of the box
+ * @param y Y position of the box
+ * @param z Z position of the box
+ * @param width Width of the box
+ * @param height Height of the box
+ * @param depth Depth of the box
+ * @returns THREE.Group containing the box mesh
  */
-export function createBox(x: number, y: number, z: number, size: number) {
+export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number) {
   const group = new THREE.Group();
   
-  // Basic dimensions
-  const width = size * 0.8;
-  const height = size * 0.95;
-  const depth = size * 0.8;
-  const thickness = size * 0.05;
+  // Calculate wall thickness based on the smallest dimension
+  const thickness = Math.min(width, height, depth) * 0.05;
   
   // Materials
   const greenMaterial = new THREE.MeshStandardMaterial({
@@ -56,43 +60,64 @@ export function createBox(x: number, y: number, z: number, size: number) {
 }
 
 /**
- * Creates a grid of boxes
+ * Legacy support for old createBox function signature
+ */
+export function createBoxLegacy(x: number, y: number, z: number, size: number) {
+  return createBox(x, y, z, size * 0.8, size * 0.95, size * 0.8);
+}
+
+/**
+ * Creates a grid of boxes with exactly one box per cell
+ * @param parentGroup The THREE.Group to add boxes to
+ * @param grid Grid settings with dimensions and divisions
+ * @returns Array of created boxes
  */
 export function createBoxGrid(parentGroup: THREE.Group, grid: any) {
-  // Clear existing boxes
+  // Remove all existing boxes from the parent group
   while (parentGroup.children.length > 0) {
     parentGroup.remove(parentGroup.children[0]);
   }
   
-  // Calculate dimensions
+  // Calculate dimensions for each cell
   const cellWidth = grid.width / grid.horizontalDivisions;
   const cellHeight = grid.height / grid.verticalDivisions;
   const cellLength = grid.length / grid.horizontalDivisions;
   
+  // Define buffer in mm
+  const bufferSize = 1; // 1mm buffer on all sides
+  
+  // Calculate starting positions to center boxes in cells
   const startX = -grid.width / 2 + cellWidth / 2;
   const startY = 0;
   const startZ = -grid.length / 2 + cellLength / 2;
   
   const boxes = [];
   
-  // Create boxes in grid
+  // Create boxes in grid - one box per cell
   for (let y = 0; y < grid.verticalDivisions; y++) {
     for (let x = 0; x < grid.horizontalDivisions; x++) {
       for (let z = 0; z < grid.horizontalDivisions; z++) {
+        // Calculate the center position of this cell
         const posX = startX + x * cellWidth;
-        // Adjust Y position to center the box vertically within the cell
-        // Add half the cell height to ensure the box is centered
         const posY = startY + y * cellHeight + cellHeight / 2;
         const posZ = startZ + z * cellLength;
         
-        const cellSize = Math.min(cellWidth, cellHeight, cellLength);
-        const box = createBox(posX, posY, posZ, cellSize);
+        // Calculate box dimensions with buffer
+        const boxWidth = cellWidth - 2 * bufferSize;
+        const boxHeight = cellHeight - 2 * bufferSize;
+        const boxDepth = cellLength - 2 * bufferSize;
+        
+        // Create box with maximum possible dimensions
+        const box = createBox(posX, posY, posZ, boxWidth, boxHeight, boxDepth);
         
         parentGroup.add(box);
         boxes.push(box);
       }
     }
   }
+  
+  // Log the number of boxes created for debugging
+  console.log(`Grid created with ${boxes.length} boxes (${grid.horizontalDivisions}×${grid.verticalDivisions}×${grid.horizontalDivisions} cells)`);
   
   return boxes;
 }
