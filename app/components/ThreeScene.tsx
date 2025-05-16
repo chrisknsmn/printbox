@@ -274,8 +274,8 @@ export default function ThreeScene() {
     const boxDepth = zCellSize - 2 * settingsToApply.bufferSize;
     
     // Calculate the maximum allowable wall thickness to match cubeUtils.ts calculation
-    // (1/3 of the smallest dimension to ensure a hole remains)
-    const maxWallThicknessForCell = Math.floor(Math.min(boxWidth, boxDepth) / 3);
+    const calculatedMax = Math.floor(Math.min(boxWidth, boxDepth) / 3);
+    const maxWallThicknessForCell = Math.min(calculatedMax, 20);
     const adjustedThickness = Math.min(
       Math.max(Math.round(settingsToApply.wallThickness), 2),
       maxWallThicknessForCell
@@ -309,11 +309,7 @@ export default function ThreeScene() {
     if (cubeRef.current) {
       populateGridCells(settingsToApply);
     }
-  
-    // Debug logs
-    console.clear();
-    console.log("Wall Thickness:", adjustedThickness);
-    console.log("Max per cell:", maxWallThicknessForCell);
+    
   };
 
   const populateGridCells = (settings: GridSettings = gridSettings) => {

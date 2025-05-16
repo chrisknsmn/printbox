@@ -16,7 +16,9 @@ export function createBox(x: number, y: number, z: number, width: number, height
   const group = new THREE.Group();
   
   // Calculate the maximum allowable wall thickness (1/3 of the smallest dimension to ensure a hole remains)
-  const maxAllowableThickness = Math.min(width, depth) / 3;
+  // With a hard limit of 20mm regardless of box size
+  const calculatedMax = Math.min(width, depth) / 3;
+  const maxAllowableThickness = Math.min(calculatedMax, 20); // Hard limit of 20mm
   
   // Calculate default wall thickness based on the smallest dimension
   const calculatedThickness = Math.min(width, height, depth) * 0.05;
