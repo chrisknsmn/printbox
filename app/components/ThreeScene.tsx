@@ -20,6 +20,7 @@ interface GridSettings {
   verticalDivisions: number;
   visible: boolean;
   color: number;
+  bufferSize: number; // Buffer size in mm between cells
 }
 
 function createBoundingGrid(settings: GridSettings) {
@@ -85,7 +86,7 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
     group.remove(child);
   }
   
-  const { width, length, height, horizontalDivisions, verticalDivisions } = settings;
+  const { width, length, height, horizontalDivisions, verticalDivisions, bufferSize } = settings;
   const createdBoxes: THREE.Object3D[] = [];
   
   const xCellSize = width / horizontalDivisions;
@@ -94,9 +95,6 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
   
   const halfWidth = width / 2;
   const halfLength = length / 2;
-  
-  // Define buffer in mm
-  const bufferSize = 1; // 1mm buffer on all sides
   
   // Create a box for each cell
   for (let y = 0; y < verticalDivisions; y++) {
@@ -143,12 +141,14 @@ export default function ThreeScene() {
   const [gridSettings, setGridSettings] = useState<GridSettings>({
     width: 100, length: 100, height: 50,
     horizontalDivisions: 2, verticalDivisions: 1,
-    visible: true, color: 0x888888
+    visible: true, color: 0x888888,
+    bufferSize: 1 // Default 1mm buffer
   });
   
   const [inputs, setInputs] = useState({
     width: '100', length: '100', height: '50',
-    horizontalDivisions: '2', verticalDivisions: '1'
+    horizontalDivisions: '2', verticalDivisions: '1',
+    bufferSize: '1'
   });
   
   // Menu options
@@ -196,26 +196,54 @@ export default function ThreeScene() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
     let value = e.target.value;
     
-    // Enforce maximum limits
-    if (property.includes('Divisions')) {
-      const numValue = parseInt(value);
-      if (!isNaN(numValue)) {
-        // Different max values for horizontal and vertical divisions
-        if (property === 'verticalDivisions' && numValue > 6) {
-          value = '6';
-          e.target.value = '6';
-        } else if (property === 'horizontalDivisions' && numValue > 16) {
-          value = '16';
-          e.target.value = '16';
+    // Enforce maximum and minimum limits
+    const numValue = parseInt(value);
+    if (!isNaN(numValue)) {
+      // Handle different properties
+      if (property === 'verticalDivisions' && numValue > 6) {
+        value = '6';
+        e.target.value = '6';
+      } else if (property === 'horizontalDivisions' && numValue > 16) {
+        value = '16';
+        e.target.value = '16';
+      } else if (property === 'bufferSize') {
+        // Buffer size limits: 1mm to 20mm
+        if (numValue < 1) {
+          value = '1';
+          e.target.value = '1';
+        } else if (numValue > 20) {
+          value = '20';
+          e.target.value = '20';
         }
+      } else if (property === 'width' || property === 'length' || property === 'height') {
+        // Dimension limits: 10mm to 1000mm
+        if (numValue < 10) {
+          value = '10';
+          e.target.value = '10';
+        } else if (numValue > 1000) {
+          value = '1000';
+          e.target.value = '1000';
+        }
+      }
+      
+      // Ensure all numeric inputs are positive
+      if (numValue <= 0) {
+        if (property === 'bufferSize') {
+          value = '1';
+        } else if (property === 'width' || property === 'length' || property === 'height') {
+          value = '10';
+        } else {
+          value = '1';
+        }
+        e.target.value = value;
       }
     }
     
     setInputs(prev => ({ ...prev, [property]: value }));
     
-    const numValue = parseInt(value);
-    if (!isNaN(numValue) && numValue > 0) {
-      const newSettings = { ...gridSettings, [property]: numValue };
+    const updatedNumValue = parseInt(value);
+    if (!isNaN(updatedNumValue) && updatedNumValue > 0) {
+      const newSettings = { ...gridSettings, [property]: updatedNumValue };
       updateGrid(newSettings);
     }
   };
@@ -283,7 +311,7 @@ export default function ThreeScene() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minDistance = 1;
-    controls.maxDistance = 1000;
+    controls.maxDistance = 5000; // Increased from 1000 to allow zooming out farther
     controlsRef.current = controls;
 
     // Create cubes group
@@ -382,15 +410,21 @@ export default function ThreeScene() {
           <div style={{ padding: '12px' }}>
             {/* Dimension inputs */}
             <div style={{ marginBottom: '12px' }}>
-              {['width', 'length', 'height', 'horizontalDivisions', 'verticalDivisions'].map(field => (
+              {['width', 'length', 'height', 'horizontalDivisions', 'verticalDivisions', 'bufferSize'].map(field => (
                 <div key={field} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label>{field.charAt(0).toUpperCase() + field.slice(1)} {field.includes('width') || field.includes('length') || field.includes('height') ? '(mm)' : ''}:</label>
+                  <label>
+                    {field === 'bufferSize' ? 'Buffer Size (mm)' : 
+                      field.charAt(0).toUpperCase() + field.slice(1) + 
+                      (field.includes('width') || field.includes('length') || field.includes('height') ? ' (mm)' : '')}
+                  </label>
                   <input 
                     type="number" 
                     value={inputs[field as keyof typeof inputs]}
                     onChange={(e) => handleInputChange(e, field as keyof typeof gridSettings)}
-                    min={field.includes('Divisions') ? '1' : '5'}
-                    max={field === 'verticalDivisions' ? '6' : (field.includes('Divisions') ? '16' : '500')}
+                    min={field === 'bufferSize' ? '1' : (field.includes('Divisions') ? '1' : '10')}
+                    max={field === 'bufferSize' ? '20' : 
+                         (field === 'verticalDivisions' ? '6' : 
+                          (field.includes('Divisions') ? '16' : '1000'))}
                     style={{
                       width: '70px',
                       backgroundColor: 'rgba(60, 60, 60, 0.8)',

@@ -16,9 +16,13 @@ export function createBox(x: number, y: number, z: number, width: number, height
   // Calculate wall thickness based on the smallest dimension
   const thickness = Math.min(width, height, depth) * 0.05;
   
-  // Materials
-  const greenMaterial = new THREE.MeshStandardMaterial({
-    color: 0x40ff40,
+  // Check if any dimension exceeds the standard printer bed size (200mm)
+  const PRINTER_BED_SIZE = 200; // Standard printer bed size in mm
+  const exceedsPrinterBed = width > PRINTER_BED_SIZE || height > PRINTER_BED_SIZE || depth > PRINTER_BED_SIZE;
+  
+  // Materials - red for boxes that exceed printer bed size, green otherwise
+  const boxMaterial = new THREE.MeshStandardMaterial({
+    color: exceedsPrinterBed ? 0xff4040 : 0x40ff40, // Red or green
     roughness: 0.3,
     metalness: 0.2,
     side: THREE.DoubleSide
@@ -27,27 +31,27 @@ export function createBox(x: number, y: number, z: number, width: number, height
   // Create box without top (5 faces: bottom, left, right, front, back)
   // Bottom face
   const bottomGeometry = new THREE.BoxGeometry(width, thickness, depth);
-  const bottom = new THREE.Mesh(bottomGeometry, greenMaterial);
+  const bottom = new THREE.Mesh(bottomGeometry, boxMaterial);
   bottom.position.y = -height/2 + thickness/2;
   
   // Left wall
   const leftGeometry = new THREE.BoxGeometry(thickness, height, depth);
-  const leftWall = new THREE.Mesh(leftGeometry, greenMaterial);
+  const leftWall = new THREE.Mesh(leftGeometry, boxMaterial);
   leftWall.position.x = -width/2 + thickness/2;
   
   // Right wall
   const rightGeometry = new THREE.BoxGeometry(thickness, height, depth);
-  const rightWall = new THREE.Mesh(rightGeometry, greenMaterial);
+  const rightWall = new THREE.Mesh(rightGeometry, boxMaterial);
   rightWall.position.x = width/2 - thickness/2;
   
   // Front wall
   const frontGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
-  const frontWall = new THREE.Mesh(frontGeometry, greenMaterial);
+  const frontWall = new THREE.Mesh(frontGeometry, boxMaterial);
   frontWall.position.z = depth/2 - thickness/2;
   
   // Back wall
   const backGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
-  const backWall = new THREE.Mesh(backGeometry, greenMaterial);
+  const backWall = new THREE.Mesh(backGeometry, boxMaterial);
   backWall.position.z = -depth/2 + thickness/2;
   
   // Add all faces to the group
