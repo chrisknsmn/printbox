@@ -138,6 +138,9 @@ export default function ThreeScene() {
   const cubeRef = useRef<THREE.Group | null>(null);
   const cubesRef = useRef<THREE.Object3D[]>([]);
   
+  // Track maximum wall thickness
+  const [maxWallThickness, setMaxWallThickness] = useState(33); // Initial calculated value
+  
   // Grid settings and inputs
   const [gridSettings, setGridSettings] = useState<GridSettings>({
     width: 100, length: 100, height: 50,
@@ -174,6 +177,9 @@ export default function ThreeScene() {
     // This ensures wall thickness is valid regardless of what parameter changed
     const minDimension = Math.min(newSettings.width, newSettings.length);
     const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
+    
+    // Update the max wall thickness state
+    setMaxWallThickness(maxAllowableThickness);
     
     // Ensure wall thickness is at least 2mm and rounded to the nearest mm
     let adjustedThickness = Math.max(Math.round(newSettings.wallThickness), 2);
@@ -242,6 +248,21 @@ export default function ThreeScene() {
       } else if (numValue > 1000) {
         snappedValue = '1000';
       }
+      
+      // When width or length changes, recalculate max wall thickness
+      if (property === 'width' || property === 'length') {
+        // If the wall thickness is currently at max, we need to update it when width/length changes
+        const newWidth = property === 'width' ? numValue : gridSettings.width;
+        const newLength = property === 'length' ? numValue : gridSettings.length;
+        const newMin = Math.min(newWidth, newLength);
+        const newMaxThickness = Math.floor(newMin / 3);
+        setMaxWallThickness(newMaxThickness);
+        
+        // If current wall thickness exceeds new max, adjust it
+        if (gridSettings.wallThickness > newMaxThickness) {
+          setInputs(prev => ({ ...prev, wallThickness: newMaxThickness.toString() }));
+        }
+      }
     } else if (property === 'bufferSize') {
       // Buffer: 1mm to 20mm
       if (numValue < 1) {
@@ -251,17 +272,15 @@ export default function ThreeScene() {
       }
     } else if (property === 'wallThickness') {
       // Wall thickness: 2mm to max (based on box dimensions)
-      // Calculate max allowable thickness (1/3 of the smallest dimension to ensure a hole remains)
-      const minDimension = Math.min(gridSettings.width, gridSettings.length);
-      const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
+      // Use the state variable for max thickness
       
       // Round the input value to the nearest mm
       let roundedValue = Math.round(numValue);
       
       if (roundedValue < 2) {
         snappedValue = '2';
-      } else if (roundedValue > maxAllowableThickness) {
-        snappedValue = maxAllowableThickness.toString();
+      } else if (roundedValue > maxWallThickness) {
+        snappedValue = maxWallThickness.toString();
       } else {
         // Use the rounded value
         snappedValue = roundedValue.toString();
@@ -302,6 +321,23 @@ export default function ThreeScene() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
     // Always update the input field value immediately for a responsive feel
     const inputValue = e.target.value;
+    
+    // Special handling for wall thickness to enforce maximum
+    if (property === 'wallThickness') {
+      const numValue = parseFloat(inputValue);
+      
+      // If it's a valid number and exceeds max, snap to max
+      if (!isNaN(numValue) && numValue > maxWallThickness) {
+        setInputs(prev => ({ ...prev, [property]: maxWallThickness.toString() }));
+        
+        // Update the grid with the valid max value
+        const newSettings = { ...gridSettings, [property]: maxWallThickness };
+        updateGrid(newSettings);
+        return;
+      }
+    }
+    
+    // For other properties, or valid wall thickness, update normally
     setInputs(prev => ({ ...prev, [property]: inputValue }));
     
     // Don't try to parse empty inputs or inputs that are just a minus sign
@@ -328,25 +364,15 @@ export default function ThreeScene() {
         isValid = false;
       }
     } else if (property === 'wallThickness') {
-      // Calculate max allowable thickness (1/3 of the smallest dimension to ensure a hole remains)
-      const minDimension = Math.min(gridSettings.width, gridSettings.length);
-      const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
-      
       // Round the value to the nearest mm
       validValue = Math.round(validValue);
       
       if (validValue < 2) {
         // Below minimum - don't update grid
         isValid = false;
-      } else if (validValue > maxAllowableThickness) {
-        // Above maximum - snap to max and update grid with max value
-        isValid = true; // We'll still update the grid with the max value
-        validValue = maxAllowableThickness;
-        // Immediately update the input field to show the max value
-        const snappedValue = maxAllowableThickness.toString();
-        setTimeout(() => {
-          setInputs(prev => ({ ...prev, [property]: snappedValue }));
-        }, 10);
+      } else if (validValue > maxWallThickness) {
+        // Above maximum - already handled above
+        isValid = false;
       }
     } else if (property === 'verticalDivisions') {
       if (validValue < 1 || validValue > 6 || !Number.isInteger(validValue)) {
@@ -455,6 +481,11 @@ export default function ThreeScene() {
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
     
+    // Calculate and set initial max wall thickness
+    const minDimension = Math.min(gridSettings.width, gridSettings.length);
+    const initialMaxThickness = Math.floor(minDimension / 3);
+    setMaxWallThickness(initialMaxThickness);
+    
     // Populate grid cells
     populateGridCells();
 
@@ -548,7 +579,7 @@ export default function ThreeScene() {
                          field === 'wallThickness' ? '2' :
                          (field.includes('Divisions') ? '1' : '10')}
                     max={field === 'bufferSize' ? '20' : 
-                         field === 'wallThickness' ? Math.floor(Math.min(gridSettings.width, gridSettings.length) / 3).toString() :
+                         field === 'wallThickness' ? maxWallThickness.toString() :
                          (field === 'verticalDivisions' ? '6' : 
                           (field.includes('Divisions') ? '16' : '1000'))}
                     style={{
