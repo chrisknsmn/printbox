@@ -262,70 +262,58 @@ export default function ThreeScene() {
 
   const updateGrid = (newSettings: GridSettings) => {
     if (!sceneRef.current || !gridRef.current) return;
-
-    // Create a clone of the settings to avoid mutations affecting other code
+  
     const settingsToApply = { ...newSettings };
-
-    // Always check and adjust wall thickness when any parameter changes
-    // This ensures wall thickness is valid regardless of what parameter changed
-    const minDimension = Math.min(
-      settingsToApply.width,
-      settingsToApply.length
+  
+    // Calculate cell sizes
+    const xCellSize = settingsToApply.width / settingsToApply.horizontalDivisions;
+    const zCellSize = settingsToApply.length / settingsToApply.horizontalDivisions;
+    
+    // Buffer size affects actual box dimensions within each cell
+    const boxWidth = xCellSize - 2 * settingsToApply.bufferSize;
+    const boxDepth = zCellSize - 2 * settingsToApply.bufferSize;
+    
+    // Calculate the maximum allowable wall thickness to match cubeUtils.ts calculation
+    // (1/3 of the smallest dimension to ensure a hole remains)
+    const maxWallThicknessForCell = Math.floor(Math.min(boxWidth, boxDepth) / 3);
+    const adjustedThickness = Math.min(
+      Math.max(Math.round(settingsToApply.wallThickness), 2),
+      maxWallThicknessForCell
     );
-    const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
-
-    // Ensure wall thickness is at least 2mm and rounded to the nearest mm
-    let adjustedThickness = Math.max(
-      Math.round(settingsToApply.wallThickness),
-      2
-    );
-
-    // Ensure it doesn't exceed the maximum
-    adjustedThickness = Math.min(adjustedThickness, maxAllowableThickness);
-
-    // Always update the settings with the adjusted thickness
+  
     settingsToApply.wallThickness = adjustedThickness;
-
-    // Clean up old grid
+  
+    // Update max wall thickness state (used for input limits/display)
+    setMaxWallThickness(maxWallThicknessForCell);
+  
+    // Dispose old grid
     sceneRef.current.remove(gridRef.current);
     gridRef.current.geometry.dispose();
     if (gridRef.current.material instanceof THREE.Material) {
       gridRef.current.material.dispose();
     }
-
-    // Create new grid
+  
+    // Create new grid and update scene
     const newGrid = createBoundingGrid(settingsToApply);
     sceneRef.current.add(newGrid);
     gridRef.current = newGrid;
-
-    // Update max wall thickness first to ensure UI constraint is updated
-    setMaxWallThickness(maxAllowableThickness);
-
-    // Force synchronization of wall thickness input with actual applied value
-    // This must happen BEFORE updating gridSettings to ensure the input is correct
-    setTimeout(() => {
-      // Use direct DOM manipulation to force input value to match applied thickness
-      const wallThicknessInput = document.querySelector(
-        'input[name="wallThickness"]'
-      ) as HTMLInputElement;
-      if (wallThicknessInput) {
-        wallThicknessInput.value = adjustedThickness.toString();
-      }
-
-      // Also update React state for the input
-      setInputs((prev) => ({
-        ...prev,
-        wallThickness: adjustedThickness.toString(),
-      }));
-
-      // Finally update grid settings state
-      setGridSettings(settingsToApply);
-    }, 0);
-
+  
+    // Update state and input fields
+    setGridSettings(settingsToApply);
+    setInputs((prev) => ({
+      ...prev,
+      wallThickness: adjustedThickness.toString(),
+    }));
+  
     // Update boxes
-    if (sceneRef.current && cubeRef.current) {
+    if (cubeRef.current) {
       populateGridCells(settingsToApply);
     }
+  
+    // Debug logs
+    console.clear();
+    console.log("Wall Thickness:", adjustedThickness);
+    console.log("Max per cell:", maxWallThicknessForCell);
   };
 
   const populateGridCells = (settings: GridSettings = gridSettings) => {

@@ -1,3 +1,4 @@
+// cubeUtils.ts
 import * as THREE from 'three';
 
 /**
