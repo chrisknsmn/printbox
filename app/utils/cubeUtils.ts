@@ -14,9 +14,23 @@ import * as THREE from 'three';
 export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number) {
   const group = new THREE.Group();
   
-  // Calculate wall thickness based on the smallest dimension or use provided value
+  // Calculate the maximum allowable wall thickness (1/3 of the smallest dimension to ensure a hole remains)
+  const maxAllowableThickness = Math.min(width, depth) / 3;
+  
+  // Calculate default wall thickness based on the smallest dimension
   const calculatedThickness = Math.min(width, height, depth) * 0.05;
-  const thickness = wallThickness !== undefined ? wallThickness : calculatedThickness;
+  
+  // Use provided wall thickness or default, but ensure it's within limits
+  let thickness = wallThickness !== undefined ? wallThickness : calculatedThickness;
+  
+  // Ensure thickness is at least 2mm
+  thickness = Math.max(thickness, 2);
+  
+  // Round thickness to the nearest mm
+  thickness = Math.round(thickness);
+  
+  // Ensure thickness doesn't exceed the maximum allowable value
+  thickness = Math.min(thickness, Math.floor(maxAllowableThickness));
   
   // Check if any dimension exceeds the standard printer bed size (200mm)
   const PRINTER_BED_SIZE = 200; // Standard printer bed size in mm
@@ -26,9 +40,12 @@ export function createBox(x: number, y: number, z: number, width: number, height
   const MIN_WALL_THICKNESS = 2; // Minimum wall thickness in mm
   const wallTooThin = thickness < MIN_WALL_THICKNESS;
   
+  // Check if wall thickness is too large (would close the hole)
+  const wallTooThick = thickness > maxAllowableThickness;
+  
   // Determine box color based on validation checks
   let boxColor;
-  if (exceedsPrinterBed || wallTooThin) {
+  if (exceedsPrinterBed || wallTooThin || wallTooThick) {
     boxColor = 0xff4040; // Red for invalid boxes
   } else {
     boxColor = 0x40ff40; // Green for valid boxes

@@ -170,6 +170,26 @@ export default function ThreeScene() {
   const updateGrid = (newSettings: GridSettings) => {
     if (!sceneRef.current || !gridRef.current) return;
     
+    // Always check and adjust wall thickness when any parameter changes
+    // This ensures wall thickness is valid regardless of what parameter changed
+    const minDimension = Math.min(newSettings.width, newSettings.length);
+    const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
+    
+    // Ensure wall thickness is at least 2mm and rounded to the nearest mm
+    let adjustedThickness = Math.max(Math.round(newSettings.wallThickness), 2);
+    
+    // Ensure it doesn't exceed the maximum
+    adjustedThickness = Math.min(adjustedThickness, maxAllowableThickness);
+    
+    // If the thickness has been adjusted, update the settings and input field
+    if (adjustedThickness !== newSettings.wallThickness) {
+      // Update the wall thickness in the settings
+      newSettings.wallThickness = adjustedThickness;
+      
+      // Also update the input field to reflect the new value
+      setInputs(prev => ({ ...prev, wallThickness: adjustedThickness.toString() }));
+    }
+    
     // Clean up old grid
     sceneRef.current.remove(gridRef.current);
     gridRef.current.geometry.dispose();
@@ -230,11 +250,21 @@ export default function ThreeScene() {
         snappedValue = '20';
       }
     } else if (property === 'wallThickness') {
-      // Wall thickness: 2mm to 20mm
-      if (numValue < 2) {
+      // Wall thickness: 2mm to max (based on box dimensions)
+      // Calculate max allowable thickness (1/3 of the smallest dimension to ensure a hole remains)
+      const minDimension = Math.min(gridSettings.width, gridSettings.length);
+      const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
+      
+      // Round the input value to the nearest mm
+      let roundedValue = Math.round(numValue);
+      
+      if (roundedValue < 2) {
         snappedValue = '2';
-      } else if (numValue > 20) {
-        snappedValue = '20';
+      } else if (roundedValue > maxAllowableThickness) {
+        snappedValue = maxAllowableThickness.toString();
+      } else {
+        // Use the rounded value
+        snappedValue = roundedValue.toString();
       }
     } else if (property === 'verticalDivisions') {
       // Vertical: 1 to 6
@@ -298,8 +328,25 @@ export default function ThreeScene() {
         isValid = false;
       }
     } else if (property === 'wallThickness') {
-      if (validValue < 2 || validValue > 20) {
+      // Calculate max allowable thickness (1/3 of the smallest dimension to ensure a hole remains)
+      const minDimension = Math.min(gridSettings.width, gridSettings.length);
+      const maxAllowableThickness = Math.floor(minDimension / 3); // Floor to get integer value
+      
+      // Round the value to the nearest mm
+      validValue = Math.round(validValue);
+      
+      if (validValue < 2) {
+        // Below minimum - don't update grid
         isValid = false;
+      } else if (validValue > maxAllowableThickness) {
+        // Above maximum - snap to max and update grid with max value
+        isValid = true; // We'll still update the grid with the max value
+        validValue = maxAllowableThickness;
+        // Immediately update the input field to show the max value
+        const snappedValue = maxAllowableThickness.toString();
+        setTimeout(() => {
+          setInputs(prev => ({ ...prev, [property]: snappedValue }));
+        }, 10);
       }
     } else if (property === 'verticalDivisions') {
       if (validValue < 1 || validValue > 6 || !Number.isInteger(validValue)) {
@@ -501,7 +548,7 @@ export default function ThreeScene() {
                          field === 'wallThickness' ? '2' :
                          (field.includes('Divisions') ? '1' : '10')}
                     max={field === 'bufferSize' ? '20' : 
-                         field === 'wallThickness' ? '20' :
+                         field === 'wallThickness' ? Math.floor(Math.min(gridSettings.width, gridSettings.length) / 3).toString() :
                          (field === 'verticalDivisions' ? '6' : 
                           (field.includes('Divisions') ? '16' : '1000'))}
                     style={{
