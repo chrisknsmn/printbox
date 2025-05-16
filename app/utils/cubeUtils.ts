@@ -20,9 +20,21 @@ export function createBox(x: number, y: number, z: number, width: number, height
   const PRINTER_BED_SIZE = 200; // Standard printer bed size in mm
   const exceedsPrinterBed = width > PRINTER_BED_SIZE || height > PRINTER_BED_SIZE || depth > PRINTER_BED_SIZE;
   
-  // Materials - red for boxes that exceed printer bed size, green otherwise
+  // Check if wall thickness is too thin (less than 2mm)
+  const MIN_WALL_THICKNESS = 2; // Minimum wall thickness in mm
+  const wallTooThin = thickness < MIN_WALL_THICKNESS;
+  
+  // Determine box color based on validation checks
+  let boxColor;
+  if (exceedsPrinterBed || wallTooThin) {
+    boxColor = 0xff4040; // Red for invalid boxes
+  } else {
+    boxColor = 0x40ff40; // Green for valid boxes
+  }
+  
+  // Materials
   const boxMaterial = new THREE.MeshStandardMaterial({
-    color: exceedsPrinterBed ? 0xff4040 : 0x40ff40, // Red or green
+    color: boxColor,
     roughness: 0.3,
     metalness: 0.2,
     side: THREE.DoubleSide

@@ -193,57 +193,118 @@ export default function ThreeScene() {
     cubesRef.current = createCubesForGrid(cubeRef.current, settings);
   };
   
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
-    let value = e.target.value;
+  // Handle input blur to enforce limits when user finishes typing
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
+    const inputValue = e.target.value;
     
-    // Enforce maximum and minimum limits
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      // Handle different properties
-      if (property === 'verticalDivisions' && numValue > 6) {
-        value = '6';
-        e.target.value = '6';
-      } else if (property === 'horizontalDivisions' && numValue > 16) {
-        value = '16';
-        e.target.value = '16';
-      } else if (property === 'bufferSize') {
-        // Buffer size limits: 1mm to 20mm
-        if (numValue < 1) {
-          value = '1';
-          e.target.value = '1';
-        } else if (numValue > 20) {
-          value = '20';
-          e.target.value = '20';
-        }
-      } else if (property === 'width' || property === 'length' || property === 'height') {
-        // Dimension limits: 10mm to 1000mm
-        if (numValue < 10) {
-          value = '10';
-          e.target.value = '10';
-        } else if (numValue > 1000) {
-          value = '1000';
-          e.target.value = '1000';
-        }
+    // Handle empty or invalid inputs
+    if (inputValue === '' || inputValue === '-' || isNaN(parseFloat(inputValue))) {
+      // Set to minimum value
+      const defaultValue = property === 'bufferSize' ? '1' : 
+                          (property === 'width' || property === 'length' || property === 'height') ? '10' : '1';
+      setInputs(prev => ({ ...prev, [property]: defaultValue }));
+      return;
+    }
+    
+    // Get the numeric value
+    const numValue = parseFloat(inputValue);
+    
+    // Apply limits based on property type
+    let snappedValue = inputValue;
+    
+    // Apply limits only on blur, not during typing
+    if (property === 'width' || property === 'length' || property === 'height') {
+      // Dimensions: 10mm to 1000mm
+      if (numValue < 10) {
+        snappedValue = '10';
+      } else if (numValue > 1000) {
+        snappedValue = '1000';
       }
-      
-      // Ensure all numeric inputs are positive
-      if (numValue <= 0) {
-        if (property === 'bufferSize') {
-          value = '1';
-        } else if (property === 'width' || property === 'length' || property === 'height') {
-          value = '10';
-        } else {
-          value = '1';
-        }
-        e.target.value = value;
+    } else if (property === 'bufferSize') {
+      // Buffer: 1mm to 20mm
+      if (numValue < 1) {
+        snappedValue = '1';
+      } else if (numValue > 20) {
+        snappedValue = '20';
+      }
+    } else if (property === 'verticalDivisions') {
+      // Vertical: 1 to 6
+      const intValue = Math.floor(numValue);
+      if (intValue < 1) {
+        snappedValue = '1';
+      } else if (intValue > 6) {
+        snappedValue = '6';
+      } else {
+        snappedValue = intValue.toString();
+      }
+    } else if (property === 'horizontalDivisions') {
+      // Horizontal: 1 to 16
+      const intValue = Math.floor(numValue);
+      if (intValue < 1) {
+        snappedValue = '1';
+      } else if (intValue > 16) {
+        snappedValue = '16';
+      } else {
+        snappedValue = intValue.toString();
       }
     }
     
-    setInputs(prev => ({ ...prev, [property]: value }));
+    // Update the input with the snapped value
+    setInputs(prev => ({ ...prev, [property]: snappedValue }));
     
-    const updatedNumValue = parseInt(value);
-    if (!isNaN(updatedNumValue) && updatedNumValue > 0) {
-      const newSettings = { ...gridSettings, [property]: updatedNumValue };
+    // Update the grid with the valid value
+    const validValue = parseFloat(snappedValue);
+    if (!isNaN(validValue) && validValue > 0) {
+      const newSettings = { ...gridSettings, [property]: validValue };
+      updateGrid(newSettings);
+    }
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, property: keyof typeof gridSettings) => {
+    // Always update the input field value immediately for a responsive feel
+    const inputValue = e.target.value;
+    setInputs(prev => ({ ...prev, [property]: inputValue }));
+    
+    // Don't try to parse empty inputs or inputs that are just a minus sign
+    if (inputValue === '' || inputValue === '-') {
+      return;
+    }
+    
+    // Skip validation if the input isn't a valid number
+    if (isNaN(parseFloat(inputValue))) {
+      return;
+    }
+    
+    // Only update the grid if the value is within valid range
+    let validValue = parseFloat(inputValue);
+    let isValid = true;
+    
+    // Check if the value is within range for the property
+    if (property === 'width' || property === 'length' || property === 'height') {
+      if (validValue < 10 || validValue > 1000) {
+        isValid = false;
+      }
+    } else if (property === 'bufferSize') {
+      if (validValue < 1 || validValue > 20) {
+        isValid = false;
+      }
+    } else if (property === 'verticalDivisions') {
+      if (validValue < 1 || validValue > 6 || !Number.isInteger(validValue)) {
+        isValid = false;
+      } else {
+        validValue = Math.floor(validValue);
+      }
+    } else if (property === 'horizontalDivisions') {
+      if (validValue < 1 || validValue > 16 || !Number.isInteger(validValue)) {
+        isValid = false;
+      } else {
+        validValue = Math.floor(validValue);
+      }
+    }
+    
+    // Only update the grid if the value is valid
+    if (isValid && validValue > 0) {
+      const newSettings = { ...gridSettings, [property]: validValue };
       updateGrid(newSettings);
     }
   };
@@ -421,6 +482,7 @@ export default function ThreeScene() {
                     type="number" 
                     value={inputs[field as keyof typeof inputs]}
                     onChange={(e) => handleInputChange(e, field as keyof typeof gridSettings)}
+                    onBlur={(e) => handleInputBlur(e, field as keyof typeof gridSettings)}
                     min={field === 'bufferSize' ? '1' : (field.includes('Divisions') ? '1' : '10')}
                     max={field === 'bufferSize' ? '20' : 
                          (field === 'verticalDivisions' ? '6' : 
