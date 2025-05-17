@@ -62,8 +62,13 @@ export function createBox(x: number, y: number, z: number, width: number, height
     side: THREE.DoubleSide
   });
   
-  // Use the exact border radius provided with no automatic constraints
-  const effectiveRadius = borderRadius;
+  // Calculate a safe maximum radius (45% of the smallest dimension)
+  // This prevents boxes from collapsing when the radius is too large
+  const smallestDimension = Math.min(width, depth) / 2;
+  const safeMaxRadius = smallestDimension * 0.9;
+  
+  // Use the border radius provided but cap it at the safe maximum
+  const effectiveRadius = Math.min(borderRadius, safeMaxRadius);
   
   // If radius is 0, use regular box geometries for better performance
   if (effectiveRadius <= 0) {
@@ -116,9 +121,14 @@ export function createBox(x: number, y: number, z: number, width: number, height
     const innerDepth = depth - 2 * thickness;
     // Ensure inner shape has non-zero dimensions
     if (innerWidth > 0 && innerDepth > 0) {
-      // Inner radius should match outer radius but be slightly smaller to account for walls
-      // This ensures consistent look between inner and outer curves
-      const innerRadius = Math.max(0, effectiveRadius * 0.85);
+      // Calculate safe inner radius that's proportional to the outer radius
+      // but also accounts for wall thickness to prevent inner/outer curve collision
+      const innerWidthProportion = innerWidth / width;
+      const innerDepthProportion = innerDepth / depth;
+      const scaleFactor = Math.min(innerWidthProportion, innerDepthProportion);
+      
+      // Apply the scale factor but ensure it's never negative
+      const innerRadius = Math.max(0, effectiveRadius * scaleFactor * 0.9);
       
       innerShape.moveTo(-innerWidth/2 + innerRadius, -innerDepth/2);
       innerShape.lineTo(innerWidth/2 - innerRadius, -innerDepth/2);
@@ -194,6 +204,25 @@ export function createBox(x: number, y: number, z: number, width: number, height
  */
 export function createBoxLegacy(x: number, y: number, z: number, size: number) {
   return createBox(x, y, z, size * 0.8, size * 0.95, size * 0.8);
+}
+
+/**
+ * Calculates the maximum safe border radius for a box with given dimensions
+ * @param width Width of the box
+ * @param depth Depth of the box
+ * @param wallThickness Wall thickness of the box
+ * @returns Maximum safe border radius in mm
+ */
+export function calculateMaxSafeBorderRadius(width: number, depth: number, wallThickness: number): number {
+  // The smallest dimension determines the max radius
+  const smallestDimension = Math.min(width, depth) / 2;
+  
+  // Calculate safe maximum (90% of half the smallest dimension)
+  // This prevents boxes from collapsing when the radius is too large
+  const safeMaxRadius = Math.max(0, smallestDimension * 0.9 - wallThickness);
+  
+  // Round to the nearest integer for consistency
+  return Math.floor(safeMaxRadius);
 }
 
 /**

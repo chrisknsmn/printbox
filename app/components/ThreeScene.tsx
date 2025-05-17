@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { createBoxGrid, createBox } from "../utils/cubeUtils";
+import { createBoxGrid, createBox, calculateMaxSafeBorderRadius } from "../utils/cubeUtils";
+import { Key } from "react";
 
 interface MenuOption {
   id: string;
@@ -23,10 +24,14 @@ interface GridSettings {
   bufferSize: number; // Buffer size in mm between cells
   wallThickness: number; // Wall thickness in mm
   borderRadius: number; // Border radius in mm for rounded corners
+  [key: string]: any; // Allow additional properties for type safety
 }
 
 // Type for keys of GridSettings to help with TypeScript
-// This type alias is no longer needed as we use keyof GridSettings directly
+// Helper function to safely get field value from gridSettings
+function getGridSetting(settings: GridSettings, key: keyof GridSettings): any {
+  return settings[key];
+}
 
 function createBoundingGrid(settings: GridSettings) {
   const {
@@ -515,23 +520,39 @@ export default function ThreeScene() {
     // Convert to number and validate
     let numValue = parseFloat(inputValue);
     
-    // Apply constraints (min 0mm, max 30mm)
-    numValue = Math.max(0, Math.min(numValue, 30));
+    // Must be at least 0
+    numValue = Math.max(0, numValue);
 
     // Round to whole numbers for consistency
     numValue = Math.round(numValue);
     
-    // Update the settings directly
-    const updatedSettings = {...gridSettings};
-    updatedSettings.borderRadius = numValue;
+    // Get the cell dimensions for the current grid
+    const cellWidth = gridSettings.width / gridSettings.horizontalDivisions - 2 * gridSettings.bufferSize;
+    const cellDepth = gridSettings.length / gridSettings.horizontalDivisions - 2 * gridSettings.bufferSize;
+    
+    // Calculate the maximum safe border radius based on current dimensions
+    const maxSafeRadius = calculateMaxSafeBorderRadius(
+      cellWidth, 
+      cellDepth,
+      gridSettings.wallThickness
+    );
+    
+    // Ensure radius doesn't exceed the safe maximum
+    const safeValue = Math.min(numValue, maxSafeRadius);
+    
+    // Update the settings with a properly typed object
+    const updatedSettings: GridSettings = {
+      ...gridSettings,
+      borderRadius: safeValue
+    };
     
     // Apply the updated settings
     setGridSettings(updatedSettings);
     
-    // Update the input field to show the correct value
+    // Update the input field to show the actual applied value
     setInputs(prev => ({
       ...prev,
-      borderRadius: numValue.toString()
+      borderRadius: safeValue.toString()
     }));
     
     // Update the 3D rendering
@@ -588,18 +609,34 @@ export default function ThreeScene() {
         isValid = false;
       }
     } else if (property === "borderRadius") {
-      // Enforce constraints for border radius (0-30mm, integers only)
-      const constrained = Math.max(0, Math.min(Math.round(validValue), 30));
+      // Round to the nearest integer
+      validValue = Math.round(validValue);
       
-      // Set the value directly - avoid validation checks
+      // Get the minimum cell dimensions for the current grid
+      const cellWidth = gridSettings.width / gridSettings.horizontalDivisions - 2 * gridSettings.bufferSize;
+      const cellDepth = gridSettings.length / gridSettings.horizontalDivisions - 2 * gridSettings.bufferSize;
+      
+      // Calculate the maximum safe border radius based on current dimensions
+      const maxSafeRadius = calculateMaxSafeBorderRadius(
+        cellWidth, 
+        cellDepth,
+        gridSettings.wallThickness
+      );
+      
+      // Constrain input value between 0 and the max safe value
+      const constrained = Math.max(0, Math.min(validValue, maxSafeRadius));
+      
+      // Set the input field to show the constrained value
       setInputs(prev => ({
         ...prev,
         borderRadius: constrained.toString()
       }));
       
-      // Update grid settings directly
-      const updatedSettings = {...gridSettings};
-      updatedSettings.borderRadius = constrained;
+      // Update grid settings with a properly typed object
+      const updatedSettings: GridSettings = {
+        ...gridSettings,
+        borderRadius: constrained
+      };
       setGridSettings(updatedSettings);
       
       // Update 3D rendering
