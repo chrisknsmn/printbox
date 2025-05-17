@@ -12,7 +12,7 @@ import * as THREE from 'three';
  * @param wallThickness Optional wall thickness in mm (defaults to 5% of smallest dimension)
  * @returns THREE.Group containing the box mesh
  */
-export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number) {
+export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number, borderRadius: number = 0) {
   const group = new THREE.Group();
   
   // Calculate the maximum allowable wall thickness (1/3 of the smallest dimension to ensure a hole remains)
@@ -62,34 +62,126 @@ export function createBox(x: number, y: number, z: number, width: number, height
     side: THREE.DoubleSide
   });
   
-  // Create box without top (5 faces: bottom, left, right, front, back)
-  // Bottom face
-  const bottomGeometry = new THREE.BoxGeometry(width, thickness, depth);
-  const bottom = new THREE.Mesh(bottomGeometry, boxMaterial);
-  bottom.position.y = -height/2 + thickness/2;
+  // Use the exact border radius provided with no automatic constraints
+  const effectiveRadius = borderRadius;
   
-  // Left wall
-  const leftGeometry = new THREE.BoxGeometry(thickness, height, depth);
-  const leftWall = new THREE.Mesh(leftGeometry, boxMaterial);
-  leftWall.position.x = -width/2 + thickness/2;
-  
-  // Right wall
-  const rightGeometry = new THREE.BoxGeometry(thickness, height, depth);
-  const rightWall = new THREE.Mesh(rightGeometry, boxMaterial);
-  rightWall.position.x = width/2 - thickness/2;
-  
-  // Front wall
-  const frontGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
-  const frontWall = new THREE.Mesh(frontGeometry, boxMaterial);
-  frontWall.position.z = depth/2 - thickness/2;
-  
-  // Back wall
-  const backGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
-  const backWall = new THREE.Mesh(backGeometry, boxMaterial);
-  backWall.position.z = -depth/2 + thickness/2;
-  
-  // Add all faces to the group
-  group.add(bottom, leftWall, rightWall, frontWall, backWall);
+  // If radius is 0, use regular box geometries for better performance
+  if (effectiveRadius <= 0) {
+    // Create box without top (5 faces: bottom, left, right, front, back)
+    // Bottom face
+    const bottomGeometry = new THREE.BoxGeometry(width, thickness, depth);
+    const bottom = new THREE.Mesh(bottomGeometry, boxMaterial);
+    bottom.position.y = -height/2 + thickness/2;
+    
+    // Left wall
+    const leftGeometry = new THREE.BoxGeometry(thickness, height, depth);
+    const leftWall = new THREE.Mesh(leftGeometry, boxMaterial);
+    leftWall.position.x = -width/2 + thickness/2;
+    
+    // Right wall
+    const rightGeometry = new THREE.BoxGeometry(thickness, height, depth);
+    const rightWall = new THREE.Mesh(rightGeometry, boxMaterial);
+    rightWall.position.x = width/2 - thickness/2;
+    
+    // Front wall
+    const frontGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
+    const frontWall = new THREE.Mesh(frontGeometry, boxMaterial);
+    frontWall.position.z = depth/2 - thickness/2;
+    
+    // Back wall
+    const backGeometry = new THREE.BoxGeometry(width - 2*thickness, height, thickness);
+    const backWall = new THREE.Mesh(backGeometry, boxMaterial);
+    backWall.position.z = -depth/2 + thickness/2;
+    
+    // Add all faces to the group
+    group.add(bottom, leftWall, rightWall, frontWall, backWall);
+  } else {
+    // Use rounded corners approach for walls and floor
+    
+    // Create outer shape (with rounded corners) for both walls and floor
+    const outerShape = new THREE.Shape();
+    outerShape.moveTo(-width/2 + effectiveRadius, -depth/2);
+    outerShape.lineTo(width/2 - effectiveRadius, -depth/2);
+    outerShape.quadraticCurveTo(width/2, -depth/2, width/2, -depth/2 + effectiveRadius);
+    outerShape.lineTo(width/2, depth/2 - effectiveRadius);
+    outerShape.quadraticCurveTo(width/2, depth/2, width/2 - effectiveRadius, depth/2);
+    outerShape.lineTo(-width/2 + effectiveRadius, depth/2);
+    outerShape.quadraticCurveTo(-width/2, depth/2, -width/2, depth/2 - effectiveRadius);
+    outerShape.lineTo(-width/2, -depth/2 + effectiveRadius);
+    outerShape.quadraticCurveTo(-width/2, -depth/2, -width/2 + effectiveRadius, -depth/2);
+    
+    // Create inner shape (hole) with rounded corners
+    const innerShape = new THREE.Shape();
+    const innerWidth = width - 2 * thickness;
+    const innerDepth = depth - 2 * thickness;
+    // Ensure inner shape has non-zero dimensions
+    if (innerWidth > 0 && innerDepth > 0) {
+      // Inner radius should match outer radius but be slightly smaller to account for walls
+      // This ensures consistent look between inner and outer curves
+      const innerRadius = Math.max(0, effectiveRadius * 0.85);
+      
+      innerShape.moveTo(-innerWidth/2 + innerRadius, -innerDepth/2);
+      innerShape.lineTo(innerWidth/2 - innerRadius, -innerDepth/2);
+      innerShape.quadraticCurveTo(innerWidth/2, -innerDepth/2, innerWidth/2, -innerDepth/2 + innerRadius);
+      innerShape.lineTo(innerWidth/2, innerDepth/2 - innerRadius);
+      innerShape.quadraticCurveTo(innerWidth/2, innerDepth/2, innerWidth/2 - innerRadius, innerDepth/2);
+      innerShape.lineTo(-innerWidth/2 + innerRadius, innerDepth/2);
+      innerShape.quadraticCurveTo(-innerWidth/2, innerDepth/2, -innerWidth/2, innerDepth/2 - innerRadius);
+      innerShape.lineTo(-innerWidth/2, -innerDepth/2 + innerRadius);
+      innerShape.quadraticCurveTo(-innerWidth/2, -innerDepth/2, -innerWidth/2 + innerRadius, -innerDepth/2);
+      
+      outerShape.holes.push(innerShape);
+    }
+    
+    // Create bottom shape with rounded corners (for the floor)
+    const bottomShape = new THREE.Shape();
+    bottomShape.moveTo(-width/2 + effectiveRadius, -depth/2);
+    bottomShape.lineTo(width/2 - effectiveRadius, -depth/2);
+    bottomShape.quadraticCurveTo(width/2, -depth/2, width/2, -depth/2 + effectiveRadius);
+    bottomShape.lineTo(width/2, depth/2 - effectiveRadius);
+    bottomShape.quadraticCurveTo(width/2, depth/2, width/2 - effectiveRadius, depth/2);
+    bottomShape.lineTo(-width/2 + effectiveRadius, depth/2);
+    bottomShape.quadraticCurveTo(-width/2, depth/2, -width/2, depth/2 - effectiveRadius);
+    bottomShape.lineTo(-width/2, -depth/2 + effectiveRadius);
+    bottomShape.quadraticCurveTo(-width/2, -depth/2, -width/2 + effectiveRadius, -depth/2);
+    
+    // Extrude the bottom shape slightly to create the floor
+    const floorExtrudeSettings = {
+      steps: 1,
+      depth: thickness,
+      bevelEnabled: false
+    };
+    
+    const floorGeometry = new THREE.ExtrudeGeometry(bottomShape, floorExtrudeSettings);
+    const floor = new THREE.Mesh(floorGeometry, boxMaterial);
+    
+    // Rotate and position the floor
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -height/2;
+    
+    // Add floor to group
+    group.add(floor);
+    
+    // Create the walls by making separate extrusion that goes up from the floor
+    const wallExtrudeSettings = {
+      steps: 1,
+      depth: height - thickness,
+      bevelEnabled: false
+    };
+    
+    // Create extruded geometry for walls
+    const wallGeometry = new THREE.ExtrudeGeometry(outerShape, wallExtrudeSettings);
+    const walls = new THREE.Mesh(wallGeometry, boxMaterial);
+    
+    // Rotate the walls to make them stand upright
+    walls.rotation.x = -Math.PI / 2;
+    
+    // Position the walls correctly on top of the floor
+    walls.position.y = -height/2 + thickness;
+    
+    // Add walls to group
+    group.add(walls);
+  }
   
   // Position the box
   group.position.set(x, y, z);

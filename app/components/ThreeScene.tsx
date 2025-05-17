@@ -22,7 +22,11 @@ interface GridSettings {
   color: number;
   bufferSize: number; // Buffer size in mm between cells
   wallThickness: number; // Wall thickness in mm
+  borderRadius: number; // Border radius in mm for rounded corners
 }
+
+// Type for keys of GridSettings to help with TypeScript
+// This type alias is no longer needed as we use keyof GridSettings directly
 
 function createBoundingGrid(settings: GridSettings) {
   const {
@@ -195,7 +199,8 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
           boxWidth,
           boxHeight,
           boxDepth,
-          wallThickness
+          wallThickness,
+          settings.borderRadius
         );
 
         // Add to group and track
@@ -234,6 +239,7 @@ export default function ThreeScene() {
     color: 0x888888,
     bufferSize: 1, // Default 1mm buffer
     wallThickness: 2, // Default 2mm wall thickness (minimum allowed)
+    borderRadius: 0, // Default 0mm border radius (sharp corners)
   });
 
   const [inputs, setInputs] = useState({
@@ -244,6 +250,7 @@ export default function ThreeScene() {
     verticalDivisions: "1",
     bufferSize: "1",
     wallThickness: "2",
+    borderRadius: "0",
   });
 
   // Menu options
@@ -321,7 +328,7 @@ export default function ThreeScene() {
   // Handle input blur to enforce limits when user finishes typing
   const handleInputBlur = (
     e: React.FocusEvent<HTMLInputElement>,
-    property: keyof typeof gridSettings
+    property: keyof GridSettings
   ) => {
     const inputValue = e.target.value;
 
@@ -388,6 +395,13 @@ export default function ThreeScene() {
       } else if (numValue > 20) {
         snappedValue = "20";
       }
+    } else if (property === "borderRadius") {
+      // Border radius: 0mm to 30mm
+      if (numValue < 0) {
+        snappedValue = "0";
+      } else if (numValue > 30) {
+        snappedValue = "30";
+      }
     } else if (property === "wallThickness") {
       // Wall thickness: 2mm to max (based on box dimensions)
       // Use the state variable for max thickness
@@ -434,19 +448,16 @@ export default function ThreeScene() {
       const newSettings = { ...gridSettings, [property]: validValue };
       updateGrid(newSettings);
 
-      // For wall thickness, make sure the input field shows the actual applied value
+      // For wall thickness and border radius, make sure the input field shows the actual applied value
       // which might be adjusted in updateGrid
       if (
-        property === "wallThickness" &&
-        newSettings.wallThickness !== gridSettings.wallThickness
+        (property === "wallThickness" && newSettings.wallThickness !== validValue) ||
+        (property === "borderRadius" && newSettings.borderRadius !== validValue)
       ) {
-        // Wait for the next tick to ensure updateGrid has completed
-        setTimeout(() => {
-          setInputs((prev) => ({
-            ...prev,
-            wallThickness: gridSettings.wallThickness.toString(),
-          }));
-        }, 0);
+        setInputs((prev) => ({
+          ...prev,
+          [property]: newSettings[property].toString(),
+        }));
       }
     }
   };
@@ -476,22 +487,70 @@ export default function ThreeScene() {
     // Apply constraints (min 2mm, max based on dimensions)
     numValue = Math.max(2, Math.min(numValue, maxWallThickness));
 
-    // Only update if different from current value
-    if (numValue !== gridSettings.wallThickness) {
-      // Apply the new wall thickness
-      const newSettings = { ...gridSettings, wallThickness: numValue };
-      updateGrid(newSettings);
+    // Always update to make sure changes take effect
+    // Apply the new wall thickness
+    const newSettings = { ...gridSettings, wallThickness: numValue };
+    updateGrid(newSettings);
+  };
+
+  
+  // Handle border radius specifically
+  const handleBorderRadiusChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    let inputValue = e.target.value;
+
+    // Update the input display immediately for a responsive feel
+    setInputs((prev) => ({ ...prev, borderRadius: inputValue }));
+
+    // Don't process empty inputs or incomplete values
+    if (
+      inputValue === "" ||
+      inputValue === "-" ||
+      isNaN(parseFloat(inputValue))
+    ) {
+      return;
+    }
+
+    // Convert to number and validate
+    let numValue = parseFloat(inputValue);
+    
+    // Apply constraints (min 0mm, max 30mm)
+    numValue = Math.max(0, Math.min(numValue, 30));
+
+    // Round to whole numbers for consistency
+    numValue = Math.round(numValue);
+    
+    // Update the settings directly
+    const updatedSettings = {...gridSettings};
+    updatedSettings.borderRadius = numValue;
+    
+    // Apply the updated settings
+    setGridSettings(updatedSettings);
+    
+    // Update the input field to show the correct value
+    setInputs(prev => ({
+      ...prev,
+      borderRadius: numValue.toString()
+    }));
+    
+    // Update the 3D rendering
+    if (cubeRef.current) {
+      populateGridCells(updatedSettings);
     }
   };
 
   // Generic handler for other inputs
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    property: keyof typeof gridSettings
+    property: keyof GridSettings
   ) => {
-    // Special case for wall thickness
+    // Special cases for wall thickness and border radius
     if (property === "wallThickness") {
       handleWallThicknessChange(e);
+      return;
+    } else if (property === "borderRadius") {
+      handleBorderRadiusChange(e);
       return;
     }
 
@@ -528,6 +587,28 @@ export default function ThreeScene() {
       if (validValue < 1 || validValue > 20) {
         isValid = false;
       }
+    } else if (property === "borderRadius") {
+      // Enforce constraints for border radius (0-30mm, integers only)
+      const constrained = Math.max(0, Math.min(Math.round(validValue), 30));
+      
+      // Set the value directly - avoid validation checks
+      setInputs(prev => ({
+        ...prev,
+        borderRadius: constrained.toString()
+      }));
+      
+      // Update grid settings directly
+      const updatedSettings = {...gridSettings};
+      updatedSettings.borderRadius = constrained;
+      setGridSettings(updatedSettings);
+      
+      // Update 3D rendering
+      if (cubeRef.current) {
+        populateGridCells(updatedSettings);
+      }
+      
+      // Skip normal processing
+      return;
     } else if (property === "verticalDivisions") {
       if (validValue < 1 || validValue > 6 || !Number.isInteger(validValue)) {
         isValid = false;
@@ -744,6 +825,7 @@ export default function ThreeScene() {
                 "verticalDivisions",
                 "bufferSize",
                 "wallThickness",
+                "borderRadius",
               ].map((field) => (
                 <div
                   key={field}
@@ -818,6 +900,8 @@ export default function ThreeScene() {
                       min={
                         field === "bufferSize"
                           ? "1"
+                          : field === "borderRadius"
+                          ? "0"
                           : field.includes("Divisions")
                           ? "1"
                           : "10"
