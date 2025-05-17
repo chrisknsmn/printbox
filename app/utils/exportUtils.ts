@@ -29,12 +29,30 @@ export function createOrientedObjectForExport(object: THREE.Object3D): THREE.Gro
   // Apply any world transformations to the geometry
   clone.updateMatrixWorld(true);
   
+  // Calculate the bounding box to determine object dimensions and position
+  const bbox = new THREE.Box3().setFromObject(clone);
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  bbox.getCenter(center);
+  bbox.getSize(size);
+  
+  // We need to find the bottom face of the box to ensure it's facing down (negative Y in this case)
+  // In PrintBox, the bottom of the box is usually at the lowest Y coordinate
+  const bottomY = bbox.min.y;
+  
+  // Keep track of geometry so we can reposition everything together
+  const allGeometries: THREE.BufferGeometry[] = [];
+  const allMeshes: THREE.Mesh[] = [];
+  
   // Traverse all meshes in the object
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       // Create a new geometry with all transformations applied
       const geometry = child.geometry.clone();
       geometry.applyMatrix4(child.matrixWorld);
+      
+      // Store for later repositioning
+      allGeometries.push(geometry);
       
       // Create a new mesh with the transformed geometry
       const mesh = new THREE.Mesh(geometry, child.material);
@@ -45,9 +63,26 @@ export function createOrientedObjectForExport(object: THREE.Object3D): THREE.Gro
       mesh.scale.set(1, 1, 1);
       mesh.updateMatrix();
       
-      // Add to our export group
+      allMeshes.push(mesh);
       exportGroup.add(mesh);
     }
+  });
+  
+  const rotateXMatrix = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+  
+  allGeometries.forEach((geometry) => {
+    // Rotate around X axis to get Z-up orientation with open face at top
+    geometry.applyMatrix4(rotateXMatrix);
+    
+    // Now the bottom of the box should be at the minimum Z value
+    // Translate so that the bottom face is at Z=0
+    const translationMatrix = new THREE.Matrix4().makeTranslation(0, 0, -bottomY);
+    geometry.applyMatrix4(translationMatrix);
+  });
+  
+  // Update all meshes
+  allMeshes.forEach((mesh) => {
+    mesh.updateMatrix();
   });
   
   return exportGroup;

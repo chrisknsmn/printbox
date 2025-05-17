@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import JSZip from "jszip";
-import { createBoxGrid, createBox, calculateMaxSafeBorderRadius } from "../utils/cubeUtils";
-import { exportToSTL, downloadSTL, createBoxFileName, createOrientedObjectForExport } from "../utils/exportUtils";
-import { hashBoxes, generateManifest, createBoxExportZip } from "../utils/zipUtils";
-import { Key } from "react";
+import { createBox, calculateMaxSafeBorderRadius } from "../utils/cubeUtils";
+import { exportToSTL, createOrientedObjectForExport } from "../utils/exportUtils";
+import { hashBoxes, createBoxExportZip } from "../utils/zipUtils";
 
 interface MenuOption {
   id: string;
@@ -29,12 +27,6 @@ interface GridSettings {
   borderRadius: number; // Border radius in mm for rounded corners
   showFoot: boolean; // Whether to show a foot on each box
   [key: string]: any; // Allow additional properties for type safety
-}
-
-// Type for keys of GridSettings to help with TypeScript
-// Helper function to safely get field value from gridSettings
-function getGridSetting(settings: GridSettings, key: keyof GridSettings): any {
-  return settings[key];
 }
 
 function createBoundingGrid(settings: GridSettings) {
@@ -240,9 +232,8 @@ export default function ThreeScene() {
   const cubeRef = useRef<THREE.Group | null>(null);
   const cubesRef = useRef<THREE.Object3D[]>([]);
   
-  // Box selection
-  const [selectedBox, setSelectedBox] = useState<THREE.Object3D | null>(null);
-  const [originalMaterials, setOriginalMaterials] = useState<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(new Map());
+  // Export status
+
   const [exportStatus, setExportStatus] = useState<string>("");
   const [showExportPanel, setShowExportPanel] = useState<boolean>(true);
 
@@ -826,142 +817,9 @@ export default function ThreeScene() {
     }
   };
   
-  // Export a single selected box
-  const handleExportSelectedBox = () => {
-    if (!selectedBox) {
-      alert('No box selected. Click on a box to select it first.');
-      return;
-    }
-    
-    try {
-      // Create an oriented object suitable for STL export
-      const orientedBox = createOrientedObjectForExport(selectedBox);
-      
-      // Export to STL in binary format
-      const stlData = exportToSTL(orientedBox, true);
-      
-      // Generate a filename based on box dimensions if available
-      let fileName = 'selected_box.stl';
-      if (selectedBox.userData && selectedBox.userData.dimensions) {
-        const dims = selectedBox.userData.dimensions;
-        fileName = `box_${dims.width}x${dims.height}x${dims.depth}_mm.stl`;
-      }
-      
-      // Download the STL file
-      downloadSTL(stlData, fileName);
-      
-      setExportStatus('Box exported successfully!');
-      setTimeout(() => setExportStatus(''), 3000);
-    } catch (error) {
-      console.error('Export error:', error);
-      setExportStatus('Export failed');
-      setTimeout(() => setExportStatus(''), 3000);
-    }
-  };
+  // Export functionality (selection-based export removed)
   
-  // Clear the current box selection and restore original materials
-  const clearBoxSelection = () => {
-    if (selectedBox) {
-      // Restore original materials
-      originalMaterials.forEach((material, mesh) => {
-        mesh.material = material;
-      });
-      // Reset state
-      setOriginalMaterials(new Map());
-      setSelectedBox(null);
-    }
-  };
-  
-  // Highlight a box by changing its material
-  const highlightBox = (box: THREE.Object3D) => {
-    // Create a new Map to store original materials
-    const materialsMap = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-    
-    // Save current materials and apply highlight material
-    box.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        // Save the original material
-        materialsMap.set(child, child.material);
-        
-        // Create a new highlight material (bright orange)
-        const highlightMaterial = new THREE.MeshStandardMaterial({
-          color: 0xff7700,
-          emissive: 0xff5500,
-          emissiveIntensity: 0.5,
-          metalness: 0.8,
-          roughness: 0.2,
-          transparent: true,
-          opacity: 0.9
-        });
-        
-        // Apply the highlight material
-        child.material = highlightMaterial;
-      }
-    });
-    
-    // Store the map of original materials
-    setOriginalMaterials(materialsMap);
-  };
-  
-  // Handle clicking on a box to select it
-  const handleBoxClick = (event: MouseEvent) => {
-    if (!sceneRef.current || !cameraRef.current) return;
-    
-    // Create a raycaster for box selection
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    
-    // Calculate mouse position in normalized device coordinates (-1 to +1)
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    
-    // Update the picking ray with the camera and mouse position
-    raycaster.setFromCamera(mouse, cameraRef.current);
-    
-    // Find all intersected objects
-    const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
-    
-    // If we didn't click on anything, clear the selection
-    if (intersects.length === 0) {
-      clearBoxSelection();
-      return;
-    }
-    
-    // Find a box in the intersected objects
-    let boxFound = false;
-    for (const intersect of intersects) {
-      let obj = intersect.object;
-      
-      // Traverse up to find a parent that's a box
-      while (obj && obj.parent && obj.parent !== sceneRef.current) {
-        if (obj.userData && obj.userData.isBox) {
-          // We found a box
-          boxFound = true;
-          
-          // If it's already selected, deselect it
-          if (selectedBox === obj) {
-            clearBoxSelection();
-          } else {
-            // Otherwise, select it
-            clearBoxSelection();
-            setSelectedBox(obj);
-            highlightBox(obj);
-          }
-          
-          break;
-        }
-        
-        obj = obj.parent;
-      }
-      
-      if (boxFound) break;
-    }
-    
-    // If we didn't find a box, clear the selection
-    if (!boxFound) {
-      clearBoxSelection();
-    }
-  };
+  // No box selection functionality - removed as requested
   
   const toggleGridVisibility = () => {
     if (!gridRef.current) return;
@@ -1015,8 +873,7 @@ export default function ThreeScene() {
     controls.maxDistance = 5000; // Increased from 1000 to allow zooming out farther
     controlsRef.current = controls;
     
-    // Add click event listener for box selection
-    renderer.domElement.addEventListener('click', handleBoxClick as EventListener);
+    // No click event listener needed - box selection removed
 
     // Create cubes group
     const cubesGroup = new THREE.Group();
@@ -1066,8 +923,7 @@ export default function ThreeScene() {
     return () => {
       window.removeEventListener("resize", handleResize);
       
-      // Remove event listeners
-      renderer.domElement.removeEventListener('click', handleBoxClick as EventListener);
+      // No event listeners to remove
       
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
@@ -1087,25 +943,7 @@ export default function ThreeScene() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Selection Info Banner */}
-      {selectedBox && (
-        <div style={{
-          position: "absolute",
-          top: "10px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          backgroundColor: "rgba(255, 119, 0, 0.8)",
-          color: "white",
-          padding: "8px 16px",
-          borderRadius: "4px",
-          zIndex: 10,
-          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-          textAlign: "center",
-          fontWeight: "bold"
-        }}>
-          Box Selected
-        </div>
-      )}
+      {/* Box selection UI removed as requested */}
       
       {/* Export Status Notification */}
       {exportStatus && (
