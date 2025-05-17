@@ -846,15 +846,68 @@ export default function ThreeScene() {
     }
   };
   
-  // Export functionality (selection-based export removed)
+  // Export the selected box as STL
+  const handleExportSelectedSTL = async () => {
+    if (!selectedBox) {
+      setExportStatus('No box selected. Please select a box first.');
+      setTimeout(() => setExportStatus(''), 2000);
+      return;
+    }
+    
+    try {
+      setExportStatus('Exporting selected box...');
+      
+      // Create an oriented object suitable for STL export
+      const orientedBox = createOrientedObjectForExport(selectedBox);
+      
+      // Export to STL in binary format
+      const stlData = exportToSTL(orientedBox, true);
+      
+      // Generate a filename based on box dimensions if available
+      let fileName = 'box.stl';
+      if (selectedBox.userData && selectedBox.userData.dimensions) {
+        const dims = selectedBox.userData.dimensions;
+        fileName = `box_${dims.width}x${dims.height}x${dims.depth}_mm.stl`;
+      }
+      
+      // Create a blob and trigger download
+      const blob = new Blob([stlData], { type: 'application/octet-stream' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+      }, 100);
+      
+      setExportStatus('Box exported successfully!');
+      setTimeout(() => setExportStatus(''), 3000);
+    } catch (error) {
+      console.error('Export error:', error);
+      setExportStatus('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setTimeout(() => setExportStatus(''), 4000);
+    }
+  };
+  
+  // Handle export button click based on selection state
+  const handleExportClick = () => {
+    if (selectedBox) {
+      // If a box is selected, export just that box
+      handleExportSelectedSTL();
+    } else {
+      // Otherwise export all boxes
+      handleExportAllSTL();
+    }
+  };
   
   // Clear the current box selection and restore original materials
   const clearBoxSelection = () => {
-    if (selectedBox) {
-      // Reset state
-      setOriginalMaterials(new Map());
-      setSelectedBox(null);
-    }
+    // Reset state regardless of whether there was a previously selected box
+    // This ensures the UI always updates correctly
+    setOriginalMaterials(new Map());
+    setSelectedBox(null);
   };
   
   // Highlight a box by changing its material to orange
@@ -1342,35 +1395,34 @@ export default function ThreeScene() {
                 </label>
               </div>
             </div>
-          
-            {/* Export Panel */}
-            <div style={{ marginBottom: "20px" }}>
-              <h3
-                style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: "bold" }}
-                onClick={() => setShowExportPanel(!showExportPanel)}
+
+            {/* Box options */}
+            <div style={{ marginBottom: "12px" }}>
+              <div
+                style={{
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  borderBottom: "1px solid rgba(255,255,255,0.1)",
+                }}
               >
-                Export Options {showExportPanel ? '▼' : '►'}
-              </h3>
-              {showExportPanel && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-                    <button
-                      onClick={handleExportAllSTL}
-                      style={{
-                        backgroundColor: "rgba(60, 60, 60, 0.8)",
-                        border: "1px solid rgba(255,255,255,0.2)",
-                        color: "white",
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        flex: "1",
-                        borderRadius: "4px"
-                      }}
-                    >
-                      Export All Boxes (ZIP)
-                    </button>
-                  </div>
-                </div>
-              )}
+                Export Options
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <button
+                  onClick={handleExportClick}
+                  style={{
+                    backgroundColor: selectedBox ? "rgba(255, 119, 0, 0.6)" : "rgba(60, 60, 60, 0.8)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    color: "white",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    flex: "1",
+                    borderRadius: "4px"
+                  }}
+                >
+                  {selectedBox ? "Export Selected" : "Export All"}
+                </button>
+              </div>
             </div>
           
             {/* Grid options */}
