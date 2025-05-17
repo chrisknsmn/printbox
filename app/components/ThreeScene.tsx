@@ -294,6 +294,17 @@ export default function ThreeScene() {
     );
   
     settingsToApply.wallThickness = adjustedThickness;
+    
+    // Calculate safe border radius based on new dimensions
+    const maxSafeBorderRadius = calculateMaxSafeBorderRadius(
+      boxWidth,
+      boxDepth,
+      adjustedThickness
+    );
+    
+    // Adjust the border radius if needed to stay within safe limits
+    const safeRadius = Math.min(settingsToApply.borderRadius, maxSafeBorderRadius);
+    settingsToApply.borderRadius = safeRadius;
   
     // Update max wall thickness state (used for input limits/display)
     setMaxWallThickness(maxWallThicknessForCell);
@@ -315,6 +326,7 @@ export default function ThreeScene() {
     setInputs((prev) => ({
       ...prev,
       wallThickness: adjustedThickness.toString(),
+      borderRadius: safeRadius.toString() // Update border radius input to match actual value
     }));
   
     // Update boxes
