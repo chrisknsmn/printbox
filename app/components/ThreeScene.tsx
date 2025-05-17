@@ -232,8 +232,11 @@ export default function ThreeScene() {
   const cubeRef = useRef<THREE.Group | null>(null);
   const cubesRef = useRef<THREE.Object3D[]>([]);
   
+  // Box selection state
+  const [selectedBox, setSelectedBox] = useState<THREE.Object3D | null>(null);
+  const [originalMaterials, setOriginalMaterials] = useState<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(new Map());
+  
   // Export status
-
   const [exportStatus, setExportStatus] = useState<string>("");
   const [showExportPanel, setShowExportPanel] = useState<boolean>(true);
 
@@ -344,10 +347,36 @@ export default function ThreeScene() {
     
   };
 
+  // Helper function to reset a box to green material
+  const resetBoxMaterial = (box: THREE.Object3D) => {
+    box.traverse((child: THREE.Object3D) => {
+      if (child instanceof THREE.Mesh) {
+        // Use a green material as default
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x33cc33,  // Green color for all boxes by default
+          roughness: 0.5,
+          metalness: 0.2
+        });
+      }
+    });
+  };
+  
+  // Reset all boxes to green
+  const resetAllBoxes = () => {
+    if (!cubesRef.current) return;
+    
+    cubesRef.current.forEach(box => {
+      resetBoxMaterial(box);
+    });
+  };
+  
   const populateGridCells = (settings: GridSettings = gridSettings) => {
     if (!cubeRef.current) return;
     // Using our custom implementation instead of external utility
     cubesRef.current = createCubesForGrid(cubeRef.current, settings);
+    
+    // Make sure all boxes are green by default
+    resetAllBoxes();
   };
 
   // Handle input blur to enforce limits when user finishes typing
@@ -819,7 +848,114 @@ export default function ThreeScene() {
   
   // Export functionality (selection-based export removed)
   
-  // No box selection functionality - removed as requested
+  // Clear the current box selection and restore original materials
+  const clearBoxSelection = () => {
+    if (selectedBox) {
+      // Reset state
+      setOriginalMaterials(new Map());
+      setSelectedBox(null);
+    }
+  };
+  
+  // Highlight a box by changing its material to orange
+  const highlightBox = (box: THREE.Object3D) => {
+    // Create a new Map to store original materials
+    const materialsMap = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+    
+    // Create a new highlight material (bright orange)
+    const highlightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff7700,
+      emissive: 0xff5500,
+      emissiveIntensity: 0.5,
+      metalness: 0.8,
+      roughness: 0.2,
+      transparent: true,
+      opacity: 0.9
+    });
+    
+    // Save current materials and apply highlight material
+    box.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Save the original material
+        materialsMap.set(child, child.material);
+        
+        // Apply the highlight material
+        child.material = highlightMaterial;
+      }
+    });
+    
+    // Store the map of original materials
+    setOriginalMaterials(materialsMap);
+  };
+
+  // Handle clicking on a box to select it
+  const handleBoxClick = (event: MouseEvent) => {
+    if (!sceneRef.current || !cameraRef.current) return;
+    
+    // Create a raycaster for box selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    // Update the picking ray with the camera and mouse position
+    raycaster.setFromCamera(mouse, cameraRef.current);
+    
+    // Find all intersected objects
+    const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
+    
+    // If we didn't click on anything, clear the selection
+    if (intersects.length === 0) {
+      clearBoxSelection();
+      // Reset all boxes to green
+      resetAllBoxes();
+      return;
+    }
+    
+    // Find a box in the intersected objects
+    let boxFound = false;
+    for (const intersect of intersects) {
+      let obj = intersect.object;
+      
+      // Traverse up to find a parent that's a box
+      while (obj && obj.parent && obj.parent !== sceneRef.current) {
+        if (obj.userData && obj.userData.isBox) {
+          // We found a box
+          boxFound = true;
+          
+          // If it's already selected, deselect it
+          if (selectedBox === obj) {
+            clearBoxSelection();
+            // Reset all boxes to green
+            resetAllBoxes();
+          } else {
+            // Otherwise, select it
+            clearBoxSelection();
+            // Reset all boxes to green first
+            resetAllBoxes();
+            // Then select and highlight the clicked box
+            setSelectedBox(obj);
+            highlightBox(obj);
+          }
+          
+          break;
+        }
+        
+        obj = obj.parent;
+      }
+      
+      if (boxFound) break;
+    }
+    
+    // If we didn't find a box, clear the selection
+    if (!boxFound) {
+      clearBoxSelection();
+      // Reset all boxes to green
+      resetAllBoxes();
+    }
+  };
   
   const toggleGridVisibility = () => {
     if (!gridRef.current) return;
@@ -873,7 +1009,8 @@ export default function ThreeScene() {
     controls.maxDistance = 5000; // Increased from 1000 to allow zooming out farther
     controlsRef.current = controls;
     
-    // No click event listener needed - box selection removed
+    // Add click event listener for box selection
+    renderer.domElement.addEventListener('click', handleBoxClick as EventListener);
 
     // Create cubes group
     const cubesGroup = new THREE.Group();
@@ -923,7 +1060,8 @@ export default function ThreeScene() {
     return () => {
       window.removeEventListener("resize", handleResize);
       
-      // No event listeners to remove
+      // Remove event listeners
+      renderer.domElement.removeEventListener('click', handleBoxClick as EventListener);
       
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
@@ -1230,12 +1368,6 @@ export default function ThreeScene() {
                     >
                       Export All Boxes (ZIP)
                     </button>
-                  </div>
-                  
-
-                  
-                  <div style={{ fontSize: "12px", color: "#aaa", marginBottom: "8px" }}>
-                    The ZIP export includes a manifest listing all unique boxes and how many of each need to be printed.
                   </div>
                 </div>
               )}
