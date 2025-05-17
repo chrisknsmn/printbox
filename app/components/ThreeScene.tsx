@@ -24,6 +24,7 @@ interface GridSettings {
   bufferSize: number; // Buffer size in mm between cells
   wallThickness: number; // Wall thickness in mm
   borderRadius: number; // Border radius in mm for rounded corners
+  showFoot: boolean; // Whether to show a foot on each box
   [key: string]: any; // Allow additional properties for type safety
 }
 
@@ -170,6 +171,7 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
     verticalDivisions,
     bufferSize,
     wallThickness,
+    showFoot
   } = settings;
   const createdBoxes: THREE.Object3D[] = [];
 
@@ -179,24 +181,28 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
 
   const halfWidth = width / 2;
   const halfLength = length / 2;
+  
+  // Calculate foot height if showing foot (for position adjustment)
+  const footHeight = showFoot ? wallThickness * 1.5 : 0;
 
   // Create a box for each cell
   for (let y = 0; y < verticalDivisions; y++) {
     for (let x = 0; x < horizontalDivisions; x++) {
       for (let z = 0; z < horizontalDivisions; z++) {
+        // Calculate box dimensions accounting for buffer
+        // If showing foot, reduce box dimensions to ensure everything fits in cell
+        const footScaleFactor = showFoot ? 0.9 : 1.0; // Adjust to 90% size to accommodate foot
+        const boxWidth = (xCellSize - 2 * bufferSize) * footScaleFactor;
+        const boxHeight = (yCellSize - 2 * bufferSize) * footScaleFactor;
+        const boxDepth = (zCellSize - 2 * bufferSize) * footScaleFactor;
+        
         // Calculate position for this box
+        // If showing foot, adjust Y position upward to accommodate the foot
         const xPos = (x + 0.5) * xCellSize - halfWidth;
-        const yPos = (y + 0.5) * yCellSize;
+        const yPos = (y + 0.5) * yCellSize + (showFoot ? footHeight/2 : 0); 
         const zPos = (z + 0.5) * zCellSize - halfLength;
 
-        // Calculate the box dimensions with buffer on all sides
-        // This ensures each box is as large as possible within its cell
-        const boxWidth = xCellSize - 2 * bufferSize;
-        const boxHeight = yCellSize - 2 * bufferSize;
-        const boxDepth = zCellSize - 2 * bufferSize;
-
         // Use the createBox function with separate width, height, and depth
-        // This allows the height to be as tall as possible when cell size changes
         const box = createBox(
           xPos,
           yPos,
@@ -205,7 +211,8 @@ function createCubesForGrid(group: THREE.Group, settings: GridSettings) {
           boxHeight,
           boxDepth,
           wallThickness,
-          settings.borderRadius
+          settings.borderRadius,
+          settings.showFoot
         );
 
         // Add to group and track
@@ -245,6 +252,7 @@ export default function ThreeScene() {
     bufferSize: 1, // Default 1mm buffer
     wallThickness: 2, // Default 2mm wall thickness (minimum allowed)
     borderRadius: 0, // Default 0mm border radius (sharp corners)
+    showFoot: false, // Default no foot
   });
 
   const [inputs, setInputs] = useState({
@@ -1005,6 +1013,39 @@ export default function ThreeScene() {
               </div>
             </div>
 
+            {/* Grid options */}
+            {/* Box options */}
+            <div style={{ marginBottom: "12px" }}>
+              <div
+                style={{
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  borderBottom: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                Box Features
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <input
+                  type="checkbox"
+                  id="show-foot"
+                  checked={gridSettings.showFoot}
+                  onChange={(e) => {
+                    const updatedSettings = {
+                      ...gridSettings,
+                      showFoot: e.target.checked
+                    };
+                    setGridSettings(updatedSettings);
+                    populateGridCells(updatedSettings);
+                  }}
+                  style={{ cursor: "pointer" }}
+                />
+                <label htmlFor="show-foot" style={{ cursor: "pointer" }}>
+                  Add Foot to Boxes
+                </label>
+              </div>
+            </div>
+          
             {/* Grid options */}
             <div>
               <div

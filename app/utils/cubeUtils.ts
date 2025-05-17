@@ -12,7 +12,7 @@ import * as THREE from 'three';
  * @param wallThickness Optional wall thickness in mm (defaults to 5% of smallest dimension)
  * @returns THREE.Group containing the box mesh
  */
-export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number, borderRadius: number = 0) {
+export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number, borderRadius: number = 0, showFoot: boolean = false) {
   const group = new THREE.Group();
   
   // Calculate the maximum allowable wall thickness (1/3 of the smallest dimension to ensure a hole remains)
@@ -69,6 +69,11 @@ export function createBox(x: number, y: number, z: number, width: number, height
   
   // Use the border radius provided but cap it at the safe maximum
   const effectiveRadius = Math.min(borderRadius, safeMaxRadius);
+  
+  // Determine foot dimensions if needed
+  const footHeight = showFoot ? thickness * 1.5 : 0;
+  const footWidth = showFoot ? width - 2 * thickness : 0;
+  const footDepth = showFoot ? depth - 2 * thickness : 0;
   
   // If radius is 0, use regular box geometries for better performance
   if (effectiveRadius <= 0) {
@@ -191,6 +196,48 @@ export function createBox(x: number, y: number, z: number, width: number, height
     
     // Add walls to group
     group.add(walls);
+  }
+  
+  // Add foot if requested
+  if (showFoot && footHeight > 0) {
+    if (effectiveRadius <= 0) {
+      // Regular flat foot for boxes without rounded corners
+      const footGeometry = new THREE.BoxGeometry(footWidth, footHeight, footDepth);
+      const foot = new THREE.Mesh(footGeometry, boxMaterial);
+      foot.position.y = -height/2 - footHeight/2;
+      group.add(foot);
+    } else {
+      // Rounded foot that matches the box radius
+      // Create foot shape with rounded corners
+      const footShape = new THREE.Shape();
+      const innerRadius = Math.max(0, effectiveRadius * 0.8);
+      
+      footShape.moveTo(-footWidth/2 + innerRadius, -footDepth/2);
+      footShape.lineTo(footWidth/2 - innerRadius, -footDepth/2);
+      footShape.quadraticCurveTo(footWidth/2, -footDepth/2, footWidth/2, -footDepth/2 + innerRadius);
+      footShape.lineTo(footWidth/2, footDepth/2 - innerRadius);
+      footShape.quadraticCurveTo(footWidth/2, footDepth/2, footWidth/2 - innerRadius, footDepth/2);
+      footShape.lineTo(-footWidth/2 + innerRadius, footDepth/2);
+      footShape.quadraticCurveTo(-footWidth/2, footDepth/2, -footWidth/2, footDepth/2 - innerRadius);
+      footShape.lineTo(-footWidth/2, -footDepth/2 + innerRadius);
+      footShape.quadraticCurveTo(-footWidth/2, -footDepth/2, -footWidth/2 + innerRadius, -footDepth/2);
+      
+      // Extrude the foot shape
+      const footExtrudeSettings = {
+        steps: 1,
+        depth: footHeight,
+        bevelEnabled: false
+      };
+      
+      const footGeometry = new THREE.ExtrudeGeometry(footShape, footExtrudeSettings);
+      const foot = new THREE.Mesh(footGeometry, boxMaterial);
+      
+      // Rotate to proper orientation and position
+      foot.rotation.x = -Math.PI / 2;
+      foot.position.y = -height/2 - footHeight;
+      
+      group.add(foot);
+    }
   }
   
   // Position the box
