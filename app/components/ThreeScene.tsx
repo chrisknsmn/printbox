@@ -1329,9 +1329,60 @@ export default function ThreeScene() {
                 </div>
               ))}
             </div>
+            
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <input
+                  type="checkbox"
+                  id="show-foot"
+                  checked={gridSettings.showFoot}
+                  onChange={(e) => {
+                    const updatedSettings = {
+                      ...gridSettings,
+                      showFoot: e.target.checked
+                    };
+                    setGridSettings(updatedSettings);
+                    populateGridCells(updatedSettings);
+                  }}
+                  style={{ cursor: "pointer" }}
+                />
+                <label htmlFor="show-foot" style={{ cursor: "pointer" }}>
+                  Add Foot to Boxes
+                </label>
+              </div>
+            </div>
+
+            {/* Export options */}
+            <div style={{ marginBottom: "12px" }}>
+              <div
+                style={{
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  borderBottom: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                Export Options
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <button
+                  onClick={handleExportClick}
+                  style={{
+                    backgroundColor: selectedBox ? "rgba(255, 119, 0, 0.6)" : "rgba(60, 60, 60, 0.8)",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    color: "white",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    flex: "1",
+                    borderRadius: "4px"
+                  }}
+                >
+                  {selectedBox ? "Export Selected" : "Export All"}
+                </button>
+              </div>
+            </div>
 
             {/* View options */}
-            <div style={{ marginBottom: "12px" }}>
+            <div>
               <div
                 style={{
                   fontWeight: "bold",
@@ -1362,71 +1413,9 @@ export default function ThreeScene() {
                 ))}
               </div>
             </div>
-
-            {/* Grid options */}
-            {/* Box options */}
-            <div style={{ marginBottom: "12px" }}>
-              <div
-                style={{
-                  fontWeight: "bold",
-                  marginBottom: "6px",
-                  borderBottom: "1px solid rgba(255,255,255,0.1)",
-                }}
-              >
-                Box Features
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-                <input
-                  type="checkbox"
-                  id="show-foot"
-                  checked={gridSettings.showFoot}
-                  onChange={(e) => {
-                    const updatedSettings = {
-                      ...gridSettings,
-                      showFoot: e.target.checked
-                    };
-                    setGridSettings(updatedSettings);
-                    populateGridCells(updatedSettings);
-                  }}
-                  style={{ cursor: "pointer" }}
-                />
-                <label htmlFor="show-foot" style={{ cursor: "pointer" }}>
-                  Add Foot to Boxes
-                </label>
-              </div>
-            </div>
-
-            {/* Box options */}
-            <div style={{ marginBottom: "12px" }}>
-              <div
-                style={{
-                  fontWeight: "bold",
-                  marginBottom: "6px",
-                  borderBottom: "1px solid rgba(255,255,255,0.1)",
-                }}
-              >
-                Export Options
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-                <button
-                  onClick={handleExportClick}
-                  style={{
-                    backgroundColor: selectedBox ? "rgba(255, 119, 0, 0.6)" : "rgba(60, 60, 60, 0.8)",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    color: "white",
-                    padding: "8px 12px",
-                    cursor: "pointer",
-                    flex: "1",
-                    borderRadius: "4px"
-                  }}
-                >
-                  {selectedBox ? "Export Selected" : "Export All"}
-                </button>
-              </div>
-            </div>
           
             {/* Grid options */}
-            <div>
+            {/* <div>
               <div
                 style={{
                   fontWeight: "bold",
@@ -1464,7 +1453,7 @@ export default function ThreeScene() {
                   Color
                 </button>
               </div>
-            </div>
+            </div> */}
           </div>
         )}
       </div>

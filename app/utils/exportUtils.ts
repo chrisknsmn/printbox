@@ -37,55 +37,81 @@ export function createOrientedObjectForExport(object: THREE.Object3D): THREE.Gro
   bbox.getSize(size);
   
   // We need to find the bottom face of the box to ensure it's facing down (negative Y in this case)
-  // In PrintBox, the bottom of the box is usually at the lowest Y coordinate
   const bottomY = bbox.min.y;
   
-  // Keep track of geometry so we can reposition everything together
-  const allGeometries: THREE.BufferGeometry[] = [];
-  const allMeshes: THREE.Mesh[] = [];
-  
-  // Traverse all meshes in the object
+  // Process meshes with preserved structure
+  // This preserves the hierarchy and relative positions of complex parts like feet
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      // Create a new geometry with all transformations applied
-      const geometry = child.geometry.clone();
-      geometry.applyMatrix4(child.matrixWorld);
+      // Clone the mesh to avoid modifying the original
+      const meshClone = child.clone();
       
-      // Store for later repositioning
-      allGeometries.push(geometry);
+      // Preserve the original mesh's matrix and material
+      meshClone.matrix.copy(child.matrix);
+      meshClone.matrixAutoUpdate = false;
       
-      // Create a new mesh with the transformed geometry
-      const mesh = new THREE.Mesh(geometry, child.material);
-      
-      // Reset transformations since they are now baked into the geometry
-      mesh.position.set(0, 0, 0);
-      mesh.rotation.set(0, 0, 0);
-      mesh.scale.set(1, 1, 1);
-      mesh.updateMatrix();
-      
-      allMeshes.push(mesh);
-      exportGroup.add(mesh);
+      // Add to export group while preserving hierarchy
+      if (child.parent && child.parent !== clone) {
+        // Find or create parent in the export group
+        const parentInGroup = findOrCreateParent(exportGroup, child.parent, clone);
+        parentInGroup.add(meshClone);
+      } else {
+        exportGroup.add(meshClone);
+      }
     }
   });
   
+  // Update world matrices to ensure proper transformations
+  exportGroup.updateMatrixWorld(true);
+  
+  // Create a transformation matrix that rotates around X and translates to make bottom at Z=0
   const rotateXMatrix = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+  const translationMatrix = new THREE.Matrix4().makeTranslation(0, 0, -bottomY);
+  const transformMatrix = new THREE.Matrix4().multiply(translationMatrix).multiply(rotateXMatrix);
   
-  allGeometries.forEach((geometry) => {
-    // Rotate around X axis to get Z-up orientation with open face at top
-    geometry.applyMatrix4(rotateXMatrix);
-    
-    // Now the bottom of the box should be at the minimum Z value
-    // Translate so that the bottom face is at Z=0
-    const translationMatrix = new THREE.Matrix4().makeTranslation(0, 0, -bottomY);
-    geometry.applyMatrix4(translationMatrix);
-  });
-  
-  // Update all meshes
-  allMeshes.forEach((mesh) => {
-    mesh.updateMatrix();
-  });
+  // Apply final transformation to the entire group
+  exportGroup.applyMatrix4(transformMatrix);
   
   return exportGroup;
+}
+
+// Helper function to find or create a parent object in the export group
+function findOrCreateParent(exportGroup: THREE.Group, parent: THREE.Object3D, originalRoot: THREE.Object3D): THREE.Object3D {
+  // Create a path from the original root to the parent
+  const path: THREE.Object3D[] = [];
+  let current: THREE.Object3D | null = parent;
+  
+  while (current && current !== originalRoot) {
+    path.unshift(current);
+    current = current.parent || null;
+  }
+  
+  // Now create the path in the export group
+  let currentParent: THREE.Object3D = exportGroup;
+  
+  for (const node of path) {
+    let found = false;
+    
+    // Check if this node already exists in currentParent
+    currentParent.children.forEach((child) => {
+      if (child.name === node.name) {
+        currentParent = child;
+        found = true;
+      }
+    });
+    
+    // If not found, create it
+    if (!found) {
+      const newNode = new THREE.Group();
+      newNode.name = node.name;
+      newNode.matrix.copy(node.matrix);
+      newNode.matrixAutoUpdate = false;
+      currentParent.add(newNode);
+      currentParent = newNode;
+    }
+  }
+  
+  return currentParent;
 }
 
 // Trigger download of STL file
@@ -112,42 +138,82 @@ function binary(data: string | Uint8Array): boolean {
 function generateASCIISTL(object: THREE.Object3D): string {
   let output = 'solid exported\n';
   
+  // Update world matrices for all objects
+  object.updateMatrixWorld(true);
+  
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const geometry = child.geometry;
       const matrixWorld = child.matrixWorld;
       
-      // Get position attribute
-      const position = geometry.getAttribute('position');
-      
-      // Process all triangles
-      for (let i = 0; i < position.count; i += 3) {
-        // Calculate face normal
-        const a = new THREE.Vector3().fromBufferAttribute(position, i);
-        const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
-        const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+      // Handle both indexed and non-indexed geometries
+      if (geometry.index !== null) {
+        // Handle indexed geometries
+        const position = geometry.getAttribute('position');
+        const index = geometry.index;
         
-        // Apply world matrix
-        a.applyMatrix4(matrixWorld);
-        b.applyMatrix4(matrixWorld);
-        c.applyMatrix4(matrixWorld);
+        for (let i = 0; i < index.count; i += 3) {
+          const idx1 = index.getX(i);
+          const idx2 = index.getX(i + 1);
+          const idx3 = index.getX(i + 2);
+          
+          const a = new THREE.Vector3().fromBufferAttribute(position, idx1);
+          const b = new THREE.Vector3().fromBufferAttribute(position, idx2);
+          const c = new THREE.Vector3().fromBufferAttribute(position, idx3);
+          
+          // Apply world transformations
+          a.applyMatrix4(matrixWorld);
+          b.applyMatrix4(matrixWorld);
+          c.applyMatrix4(matrixWorld);
+          
+          // Calculate normal (ensure winding order is correct)
+          const normal = new THREE.Vector3()
+            .crossVectors(
+              new THREE.Vector3().subVectors(c, b), 
+              new THREE.Vector3().subVectors(a, b)
+            )
+            .normalize();
+          
+          // Write facet
+          output += `facet normal ${normal.x} ${normal.y} ${normal.z}\n`;
+          output += `  outer loop\n`;
+          output += `    vertex ${a.x} ${a.y} ${a.z}\n`;
+          output += `    vertex ${b.x} ${b.y} ${b.z}\n`;
+          output += `    vertex ${c.x} ${c.y} ${c.z}\n`;
+          output += `  endloop\n`;
+          output += `endfacet\n`;
+        }
+      } else {
+        // Handle non-indexed geometries
+        const position = geometry.getAttribute('position');
         
-        // Calculate normal
-        const normal = new THREE.Vector3()
-          .crossVectors(
-            new THREE.Vector3().subVectors(c, b), 
-            new THREE.Vector3().subVectors(a, b)
-          )
-          .normalize();
-        
-        // Write facet
-        output += `facet normal ${normal.x} ${normal.y} ${normal.z}\n`;
-        output += `  outer loop\n`;
-        output += `    vertex ${a.x} ${a.y} ${a.z}\n`;
-        output += `    vertex ${b.x} ${b.y} ${b.z}\n`;
-        output += `    vertex ${c.x} ${c.y} ${c.z}\n`;
-        output += `  endloop\n`;
-        output += `endfacet\n`;
+        for (let i = 0; i < position.count; i += 3) {
+          const a = new THREE.Vector3().fromBufferAttribute(position, i);
+          const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
+          const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+          
+          // Apply world transformations
+          a.applyMatrix4(matrixWorld);
+          b.applyMatrix4(matrixWorld);
+          c.applyMatrix4(matrixWorld);
+          
+          // Calculate normal
+          const normal = new THREE.Vector3()
+            .crossVectors(
+              new THREE.Vector3().subVectors(c, b), 
+              new THREE.Vector3().subVectors(a, b)
+            )
+            .normalize();
+          
+          // Write facet
+          output += `facet normal ${normal.x} ${normal.y} ${normal.z}\n`;
+          output += `  outer loop\n`;
+          output += `    vertex ${a.x} ${a.y} ${a.z}\n`;
+          output += `    vertex ${b.x} ${b.y} ${b.z}\n`;
+          output += `    vertex ${c.x} ${c.y} ${c.z}\n`;
+          output += `  endloop\n`;
+          output += `endfacet\n`;
+        }
       }
     }
   });
@@ -160,22 +226,25 @@ function generateASCIISTL(object: THREE.Object3D): string {
 function generateBinarySTL(object: THREE.Object3D): Uint8Array {
   let triangles = 0;
   
-  // First count the number of triangles
+  // First count the number of triangles accurately
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const geometry = child.geometry;
-      const position = geometry.getAttribute('position');
       
-      // Ensure position count is valid and divisible by 3
-      if (position && position.count > 0 && position.count % 3 === 0) {
-        triangles += position.count / 3;
+      // Handle indexed geometries properly
+      if (geometry.index !== null) {
+        triangles += geometry.index.count / 3;
+      } else {
+        const position = geometry.getAttribute('position');
+        if (position && position.count > 0) {
+          triangles += position.count / 3;
+        }
       }
     }
   });
   
-  // Add a safety margin to the triangle count to handle any potential complex geometries (like feet)
-  // This ensures we don't run out of buffer space
-  const safetyFactor = 1.5; // 50% extra space to be safe
+  // Larger safety factor for complex geometries with feet
+  const safetyFactor = 2.0; // 100% extra space for complex geometries
   const safeTriangleCount = Math.ceil(triangles * safetyFactor);
   
   // Allocate buffer (header + triangle count + triangles)
@@ -200,64 +269,115 @@ function generateBinarySTL(object: THREE.Object3D): Uint8Array {
   writer.setOffset(80);
   writer.writeUint32(triangles);
   
+  // Make sure all world matrices are updated
+  object.updateMatrixWorld(true);
+  
   // Write triangles
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const geometry = child.geometry;
-      const position = geometry.getAttribute('position');
       const matrixWorld = child.matrixWorld;
       
-      // Process all triangles
-      for (let i = 0; i < position.count; i += 3) {
-        // Get vertices
-        const a = new THREE.Vector3().fromBufferAttribute(position, i);
-        const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
-        const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+      // Handle both indexed and non-indexed geometries
+      if (geometry.index !== null) {
+        // Handle indexed geometries
+        const position = geometry.getAttribute('position');
+        const index = geometry.index;
         
-        // Apply world transformations
-        a.applyMatrix4(matrixWorld);
-        b.applyMatrix4(matrixWorld);
-        c.applyMatrix4(matrixWorld);
+        for (let i = 0; i < index.count; i += 3) {
+          const idx1 = index.getX(i);
+          const idx2 = index.getX(i + 1);
+          const idx3 = index.getX(i + 2);
+          
+          const a = new THREE.Vector3().fromBufferAttribute(position, idx1);
+          const b = new THREE.Vector3().fromBufferAttribute(position, idx2);
+          const c = new THREE.Vector3().fromBufferAttribute(position, idx3);
+          
+          // Apply world transformations
+          a.applyMatrix4(matrixWorld);
+          b.applyMatrix4(matrixWorld);
+          c.applyMatrix4(matrixWorld);
+          
+          // Calculate normal (ensure winding order is correct)
+          const normal = new THREE.Vector3()
+            .crossVectors(
+              new THREE.Vector3().subVectors(c, b), 
+              new THREE.Vector3().subVectors(a, b)
+            )
+            .normalize();
+          
+          // Write the triangle data
+          writeTriangleToSTL(writer, normal, a, b, c);
+        }
+      } else {
+        // Handle non-indexed geometries
+        const position = geometry.getAttribute('position');
         
-        // Calculate normal
-        const normal = new THREE.Vector3()
-          .crossVectors(
-            new THREE.Vector3().subVectors(c, b), 
-            new THREE.Vector3().subVectors(a, b)
-          )
-          .normalize();
-        
-        // Write normal (12 bytes)
-        writer.writeFloat32(normal.x);
-        writer.writeFloat32(normal.y);
-        writer.writeFloat32(normal.z);
-        
-        // Write vertices (36 bytes)
-        writer.writeFloat32(a.x);
-        writer.writeFloat32(a.y);
-        writer.writeFloat32(a.z);
-        
-        writer.writeFloat32(b.x);
-        writer.writeFloat32(b.y);
-        writer.writeFloat32(b.z);
-        
-        writer.writeFloat32(c.x);
-        writer.writeFloat32(c.y);
-        writer.writeFloat32(c.z);
-        
-        // Write attribute byte count (2 bytes) - usually zero
-        writer.writeUint16(0);
+        for (let i = 0; i < position.count; i += 3) {
+          const a = new THREE.Vector3().fromBufferAttribute(position, i);
+          const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
+          const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+          
+          // Apply world transformations
+          a.applyMatrix4(matrixWorld);
+          b.applyMatrix4(matrixWorld);
+          c.applyMatrix4(matrixWorld);
+          
+          // Calculate normal
+          const normal = new THREE.Vector3()
+            .crossVectors(
+              new THREE.Vector3().subVectors(c, b), 
+              new THREE.Vector3().subVectors(a, b)
+            )
+            .normalize();
+          
+          // Write the triangle data
+          writeTriangleToSTL(writer, normal, a, b, c);
+        }
       }
     }
   });
   
-  return new Uint8Array(buffer);
+  return new Uint8Array(buffer.slice(0, writer.offset));
+}
+
+// Helper function to write triangle data to STL
+function writeTriangleToSTL(writer: BinaryWriter, normal: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void {
+  // Skip degenerate triangles (zero area)
+  const ab = new THREE.Vector3().subVectors(b, a);
+  const ac = new THREE.Vector3().subVectors(c, a);
+  const cross = new THREE.Vector3().crossVectors(ab, ac);
+  
+  if (cross.lengthSq() < 1e-10) {
+    return; // Skip this triangle
+  }
+  
+  // Write normal (12 bytes)
+  writer.writeFloat32(normal.x);
+  writer.writeFloat32(normal.y);
+  writer.writeFloat32(normal.z);
+  
+  // Write vertices (36 bytes)
+  writer.writeFloat32(a.x);
+  writer.writeFloat32(a.y);
+  writer.writeFloat32(a.z);
+  
+  writer.writeFloat32(b.x);
+  writer.writeFloat32(b.y);
+  writer.writeFloat32(b.z);
+  
+  writer.writeFloat32(c.x);
+  writer.writeFloat32(c.y);
+  writer.writeFloat32(c.z);
+  
+  // Write attribute byte count (2 bytes)
+  writer.writeUint16(0);
 }
 
 // Helper class for binary writing
 class BinaryWriter {
   private view: DataView;
-  private offset: number;
+  offset: number;
   
   constructor(view: DataView) {
     this.view = view;
