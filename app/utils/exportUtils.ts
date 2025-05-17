@@ -165,13 +165,22 @@ function generateBinarySTL(object: THREE.Object3D): Uint8Array {
     if (child instanceof THREE.Mesh) {
       const geometry = child.geometry;
       const position = geometry.getAttribute('position');
-      triangles += position.count / 3;
+      
+      // Ensure position count is valid and divisible by 3
+      if (position && position.count > 0 && position.count % 3 === 0) {
+        triangles += position.count / 3;
+      }
     }
   });
   
+  // Add a safety margin to the triangle count to handle any potential complex geometries (like feet)
+  // This ensures we don't run out of buffer space
+  const safetyFactor = 1.5; // 50% extra space to be safe
+  const safeTriangleCount = Math.ceil(triangles * safetyFactor);
+  
   // Allocate buffer (header + triangle count + triangles)
   // STL format: 80-byte header, 4-byte triangle count, 50 bytes per triangle
-  const bufferSize = 84 + (50 * triangles);
+  const bufferSize = 84 + (50 * safeTriangleCount);
   const buffer = new ArrayBuffer(bufferSize);
   const view = new DataView(buffer);
   const writer = new BinaryWriter(view);
