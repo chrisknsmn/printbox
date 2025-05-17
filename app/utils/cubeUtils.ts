@@ -15,6 +15,15 @@ import * as THREE from 'three';
 export function createBox(x: number, y: number, z: number, width: number, height: number, depth: number, wallThickness?: number, borderRadius: number = 0, showFoot: boolean = false) {
   const group = new THREE.Group();
   
+  // Mark this as a box for identification during export
+  group.userData.isBox = true;
+  group.userData.dimensions = {
+    width: width,
+    height: height,
+    depth: depth
+  };
+  group.userData.borderRadius = borderRadius;
+  
   // Calculate the maximum allowable wall thickness (1/3 of the smallest dimension to ensure a hole remains)
   // With a hard limit of 20mm regardless of box size
   const calculatedMax = Math.min(width, depth) / 3;

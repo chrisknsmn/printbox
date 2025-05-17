@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import JSZip from "jszip";
 import { createBoxGrid, createBox, calculateMaxSafeBorderRadius } from "../utils/cubeUtils";
+import { exportToSTL, downloadSTL, createBoxFileName, createOrientedObjectForExport } from "../utils/exportUtils";
+import { hashBoxes, generateManifest, createBoxExportZip } from "../utils/zipUtils";
 import { Key } from "react";
 
 interface MenuOption {
@@ -236,6 +239,12 @@ export default function ThreeScene() {
   const gridRef = useRef<THREE.LineSegments | null>(null);
   const cubeRef = useRef<THREE.Group | null>(null);
   const cubesRef = useRef<THREE.Object3D[]>([]);
+  
+  // Box selection
+  const [selectedBox, setSelectedBox] = useState<THREE.Object3D | null>(null);
+  const [originalMaterials, setOriginalMaterials] = useState<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(new Map());
+  const [exportStatus, setExportStatus] = useState<string>("");
+  const [showExportPanel, setShowExportPanel] = useState<boolean>(true);
 
   // Track maximum wall thickness
   const [maxWallThickness, setMaxWallThickness] = useState(30);
@@ -714,6 +723,246 @@ export default function ThreeScene() {
     controlsRef.current.update();
   };
 
+  // Function to handle exporting all boxes as a zip file
+  const handleExportAllSTL = async () => {
+    if (!cubeRef.current || !cubeRef.current.children || cubeRef.current.children.length === 0) {
+      setExportStatus('No boxes to export');
+      setTimeout(() => setExportStatus(''), 2000);
+      return;
+    }
+    
+    // Get all boxes from the scene
+    const allBoxes: THREE.Object3D[] = [];
+    
+    // Find all objects that are boxes
+    cubeRef.current.traverse((child) => {
+      if (child.userData && child.userData.isBox) {
+        allBoxes.push(child);
+      }
+    });
+    
+    if (allBoxes.length === 0) {
+      setExportStatus('No boxes found in the scene');
+      setTimeout(() => setExportStatus(''), 2000);
+      return;
+    }
+    
+    // Store in cubesRef for future use
+    cubesRef.current = allBoxes;
+    
+    // Count the total boxes for progress reporting
+    const totalBoxes = allBoxes.length;
+    setExportStatus(`Processing ${totalBoxes} boxes...`);
+    
+    try {
+      console.log('All boxes:', allBoxes);
+      
+      // Make sure boxes have proper dimensions
+      allBoxes.forEach((box, index) => {
+        if (!box.userData.dimensions) {
+          // Try to calculate dimensions from geometry
+          const bbox = new THREE.Box3().setFromObject(box);
+          const size = new THREE.Vector3();
+          bbox.getSize(size);
+          
+          console.log(`Box ${index} missing dimensions, calculated:`, size);
+          
+          box.userData.dimensions = {
+            width: Math.round(size.x),
+            height: Math.round(size.y),
+            depth: Math.round(size.z)
+          };
+        }
+      });
+      
+      // Find duplicate boxes by dimensions
+      const boxHashes = hashBoxes(allBoxes);
+      const uniqueBoxCount = Object.keys(boxHashes).length;
+      
+      console.log('Box hashes:', boxHashes);
+      console.log(`Found ${uniqueBoxCount} unique box designs from ${totalBoxes} total boxes`);
+      
+      setExportStatus(`Found ${uniqueBoxCount} unique box designs from ${totalBoxes} total boxes`);
+      
+      // Function to get the STL data for a box
+      const getBoxSTL = (box: THREE.Object3D) => {
+        console.log('Exporting box:', box);
+        const orientedBox = createOrientedObjectForExport(box);
+        return exportToSTL(orientedBox, true); // Use binary format
+      };
+      
+      setTimeout(() => {
+        setExportStatus('Creating ZIP file with STL models and inventory manifest...');
+      }, 500);
+      
+      // Create the zip file with all unique boxes and manifest
+      const zipBlob = await createBoxExportZip(boxHashes, getBoxSTL);
+      
+      // Get zip file size in MB for reporting
+      const zipSizeMB = (zipBlob.size / (1024 * 1024)).toFixed(2);
+      
+      // Download the zip file
+      const date = new Date().toISOString().split('T')[0];
+      const zipFilename = `printbox_export_${uniqueBoxCount}_designs_${date}.zip`;
+      
+      setExportStatus(`Downloading ZIP file (${zipSizeMB} MB)...`);
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(zipBlob);
+      link.download = zipFilename;
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+      }, 100);
+      
+      setExportStatus(`Export complete! ${uniqueBoxCount} unique designs saved`);
+      setTimeout(() => setExportStatus(''), 3000);
+    } catch (error) {
+      console.error('Export error:', error);
+      setExportStatus('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setTimeout(() => setExportStatus(''), 4000);
+    }
+  };
+  
+  // Export a single selected box
+  const handleExportSelectedBox = () => {
+    if (!selectedBox) {
+      alert('No box selected. Click on a box to select it first.');
+      return;
+    }
+    
+    try {
+      // Create an oriented object suitable for STL export
+      const orientedBox = createOrientedObjectForExport(selectedBox);
+      
+      // Export to STL in binary format
+      const stlData = exportToSTL(orientedBox, true);
+      
+      // Generate a filename based on box dimensions if available
+      let fileName = 'selected_box.stl';
+      if (selectedBox.userData && selectedBox.userData.dimensions) {
+        const dims = selectedBox.userData.dimensions;
+        fileName = `box_${dims.width}x${dims.height}x${dims.depth}_mm.stl`;
+      }
+      
+      // Download the STL file
+      downloadSTL(stlData, fileName);
+      
+      setExportStatus('Box exported successfully!');
+      setTimeout(() => setExportStatus(''), 3000);
+    } catch (error) {
+      console.error('Export error:', error);
+      setExportStatus('Export failed');
+      setTimeout(() => setExportStatus(''), 3000);
+    }
+  };
+  
+  // Clear the current box selection and restore original materials
+  const clearBoxSelection = () => {
+    if (selectedBox) {
+      // Restore original materials
+      originalMaterials.forEach((material, mesh) => {
+        mesh.material = material;
+      });
+      // Reset state
+      setOriginalMaterials(new Map());
+      setSelectedBox(null);
+    }
+  };
+  
+  // Highlight a box by changing its material
+  const highlightBox = (box: THREE.Object3D) => {
+    // Create a new Map to store original materials
+    const materialsMap = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+    
+    // Save current materials and apply highlight material
+    box.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Save the original material
+        materialsMap.set(child, child.material);
+        
+        // Create a new highlight material (bright orange)
+        const highlightMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff7700,
+          emissive: 0xff5500,
+          emissiveIntensity: 0.5,
+          metalness: 0.8,
+          roughness: 0.2,
+          transparent: true,
+          opacity: 0.9
+        });
+        
+        // Apply the highlight material
+        child.material = highlightMaterial;
+      }
+    });
+    
+    // Store the map of original materials
+    setOriginalMaterials(materialsMap);
+  };
+  
+  // Handle clicking on a box to select it
+  const handleBoxClick = (event: MouseEvent) => {
+    if (!sceneRef.current || !cameraRef.current) return;
+    
+    // Create a raycaster for box selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    // Update the picking ray with the camera and mouse position
+    raycaster.setFromCamera(mouse, cameraRef.current);
+    
+    // Find all intersected objects
+    const intersects = raycaster.intersectObjects(sceneRef.current.children, true);
+    
+    // If we didn't click on anything, clear the selection
+    if (intersects.length === 0) {
+      clearBoxSelection();
+      return;
+    }
+    
+    // Find a box in the intersected objects
+    let boxFound = false;
+    for (const intersect of intersects) {
+      let obj = intersect.object;
+      
+      // Traverse up to find a parent that's a box
+      while (obj && obj.parent && obj.parent !== sceneRef.current) {
+        if (obj.userData && obj.userData.isBox) {
+          // We found a box
+          boxFound = true;
+          
+          // If it's already selected, deselect it
+          if (selectedBox === obj) {
+            clearBoxSelection();
+          } else {
+            // Otherwise, select it
+            clearBoxSelection();
+            setSelectedBox(obj);
+            highlightBox(obj);
+          }
+          
+          break;
+        }
+        
+        obj = obj.parent;
+      }
+      
+      if (boxFound) break;
+    }
+    
+    // If we didn't find a box, clear the selection
+    if (!boxFound) {
+      clearBoxSelection();
+    }
+  };
+  
   const toggleGridVisibility = () => {
     if (!gridRef.current) return;
     gridRef.current.visible = !gridRef.current.visible;
@@ -765,6 +1014,9 @@ export default function ThreeScene() {
     controls.minDistance = 1;
     controls.maxDistance = 5000; // Increased from 1000 to allow zooming out farther
     controlsRef.current = controls;
+    
+    // Add click event listener for box selection
+    renderer.domElement.addEventListener('click', handleBoxClick as EventListener);
 
     // Create cubes group
     const cubesGroup = new THREE.Group();
@@ -813,6 +1065,10 @@ export default function ThreeScene() {
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      
+      // Remove event listeners
+      renderer.domElement.removeEventListener('click', handleBoxClick as EventListener);
+      
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
@@ -831,6 +1087,71 @@ export default function ThreeScene() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Selection Info Banner */}
+      {selectedBox && (
+        <div style={{
+          position: "absolute",
+          top: "10px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          backgroundColor: "rgba(255, 119, 0, 0.8)",
+          color: "white",
+          padding: "8px 16px",
+          borderRadius: "4px",
+          zIndex: 10,
+          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+          textAlign: "center",
+          fontWeight: "bold"
+        }}>
+          Box Selected
+        </div>
+      )}
+      
+      {/* Export Status Notification */}
+      {exportStatus && (
+        <div style={{
+          position: "absolute",
+          bottom: "20px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          backgroundColor: exportStatus.includes('error') || exportStatus.includes('failed') ? 
+            "rgba(200, 50, 50, 0.9)" : 
+            exportStatus.includes('complete') ? 
+              "rgba(50, 180, 50, 0.9)" : 
+              "rgba(0, 0, 0, 0.85)",
+          color: "white",
+          padding: "12px 24px",
+          borderRadius: "4px",
+          zIndex: 10,
+          boxShadow: "0 3px 12px rgba(0,0,0,0.3)",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          minWidth: "300px",
+          maxWidth: "500px",
+          textAlign: "center",
+          fontWeight: exportStatus.includes('complete') ? "bold" : "normal",
+          transition: "opacity 0.3s ease"
+        }}>
+          {exportStatus.includes('Processing') ? (
+            <div style={{ display: "inline-block", width: "16px", height: "16px", border: "3px solid rgba(255,255,255,0.3)", borderTop: "3px solid white", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+          ) : exportStatus.includes('complete') ? (
+            <div style={{ fontSize: "18px" }}>✓</div>
+          ) : exportStatus.includes('failed') || exportStatus.includes('error') ? (
+            <div style={{ fontSize: "18px" }}>⚠️</div>
+          ) : null}
+          {exportStatus}
+        </div>
+      )}
+      
+      {/* Add animation for spinner */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}} />
+      
       {/* Controls panel */}
       <div
         style={{
@@ -843,7 +1164,7 @@ export default function ThreeScene() {
           boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
           color: "white",
           minWidth: "200px",
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid rgba(255,255,255,0.1)"
         }}
       >
         {/* Panel header with toggle */}
@@ -853,7 +1174,7 @@ export default function ThreeScene() {
             justifyContent: "space-between",
             padding: "8px 12px",
             borderBottom: "1px solid rgba(255,255,255,0.1)",
-            fontWeight: "bold",
+            fontWeight: "bold"
           }}
         >
           <span>Bounding Box</span>
@@ -1044,6 +1365,42 @@ export default function ThreeScene() {
                   Add Foot to Boxes
                 </label>
               </div>
+            </div>
+          
+            {/* Export Panel */}
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: "bold" }}
+                onClick={() => setShowExportPanel(!showExportPanel)}
+              >
+                Export Options {showExportPanel ? '▼' : '►'}
+              </h3>
+              {showExportPanel && (
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+                    <button
+                      onClick={handleExportAllSTL}
+                      style={{
+                        backgroundColor: "rgba(60, 60, 60, 0.8)",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        color: "white",
+                        padding: "8px 12px",
+                        cursor: "pointer",
+                        flex: "1",
+                        borderRadius: "4px"
+                      }}
+                    >
+                      Export All Boxes (ZIP)
+                    </button>
+                  </div>
+                  
+
+                  
+                  <div style={{ fontSize: "12px", color: "#aaa", marginBottom: "8px" }}>
+                    The ZIP export includes a manifest listing all unique boxes and how many of each need to be printed.
+                  </div>
+                </div>
+              )}
             </div>
           
             {/* Grid options */}
