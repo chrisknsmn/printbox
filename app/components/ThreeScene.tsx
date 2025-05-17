@@ -251,7 +251,7 @@ export default function ThreeScene() {
     color: 0x888888,
     bufferSize: 1, // Default 1mm buffer
     wallThickness: 2, // Default 2mm wall thickness (minimum allowed)
-    borderRadius: 0, // Default 0mm border radius (sharp corners)
+    borderRadius: 1, // Default 1mm border radius (slight rounding)
     showFoot: false, // Default no foot
   });
 
@@ -263,7 +263,7 @@ export default function ThreeScene() {
     verticalDivisions: "1",
     bufferSize: "1",
     wallThickness: "2",
-    borderRadius: "0",
+    borderRadius: "1",
   });
 
   // Menu options
@@ -540,8 +540,8 @@ export default function ThreeScene() {
     // Convert to number and validate
     let numValue = parseFloat(inputValue);
     
-    // Must be at least 0
-    numValue = Math.max(0, numValue);
+    // Must be at least 1mm
+    numValue = Math.max(1, numValue);
 
     // Round to whole numbers for consistency
     numValue = Math.round(numValue);
@@ -643,8 +643,8 @@ export default function ThreeScene() {
         gridSettings.wallThickness
       );
       
-      // Constrain input value between 0 and the max safe value
-      const constrained = Math.max(0, Math.min(validValue, maxSafeRadius));
+      // Constrain input value between 1mm and the max safe value
+      const constrained = Math.max(1, Math.min(validValue, maxSafeRadius));
       
       // Set the input field to show the constrained value
       setInputs(prev => ({
