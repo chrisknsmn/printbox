@@ -886,11 +886,6 @@ export default function ThreeScene() {
                             ? " (mm)"
                             : "")}
                     </label>
-                    {field === "wallThickness" && (
-                      <div style={{ fontSize: "0.8em", opacity: 0.8 }}>
-                        (max: {maxWallThickness}mm)
-                      </div>
-                    )}
                   </div>
                   {field === "wallThickness" ? (
                     <div
