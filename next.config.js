@@ -24,7 +24,7 @@ const nextConfig = {
   },
   
   // Ensure assets are loaded from the correct path
-  assetPrefix: './',
+  assetPrefix: '/',
   
   // App Router is now the default in Next.js 15.3.2
   // No experimental options needed
