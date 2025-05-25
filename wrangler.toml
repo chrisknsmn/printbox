@@ -1,9 +1,7 @@
 name = "printbox"
 compatibility_date = "2025-05-25"
+main = "./index.js"
 
 # Static site configuration
 [site]
 bucket = "./out"
-
-# No need for a custom worker
-main = "./index.js"
