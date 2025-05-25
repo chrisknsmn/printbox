@@ -19,6 +19,5 @@ cache:
 
 # Configure deployment
 deploy:
-  # Use Cloudflare Pages' built-in static site deployment
-  # No need for custom deploy command as Pages will automatically
-  # deploy the output_directory contents
+  # Use a specific deploy command for static sites
+  command: npx wrangler pages deploy out --project-name=printbox
