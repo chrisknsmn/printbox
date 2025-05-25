@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "name": "printbox",
+  "build": {
+    "command": "npm run build",
+    "directory": "out"
+  }
+}

@@ -1,9 +1,0 @@
-name = "printbox"
-compatibility_date = "2025-05-25"
-
-# Static site configuration for Pages
-[site]
-bucket = "./out"
-include = ["**/*"]
-exclude = []
-
