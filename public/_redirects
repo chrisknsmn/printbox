@@ -1,0 +1,5 @@
+# Handle SPA fallback
+/*    /index.html   200
+
+# Redirect www to non-www (uncomment if needed)
+# https://www.printbox.com/* https://printbox.com/:splat 301!

@@ -1,0 +1,18 @@
+build:
+  # The build command for your project
+  command: npm run build
+  # The directory where your built assets will be placed
+  output_directory: out
+  # Environment variables required during the build
+  environment:
+    NODE_VERSION: 20
+
+# Specify the Node.js version
+node_version: 20
+
+# Configure build caching
+cache:
+  # Directories to cache between builds
+  directories:
+    - node_modules
+    - .next/cache
