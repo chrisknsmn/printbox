@@ -1,8 +1,3 @@
-name = "printbox"
-compatibility_date = "2025-05-25"
-
-# Static site assets configuration
-[site]
-bucket = "./out"
-
-# Use the --assets flag with wrangler deploy
+# This file is intentionally left empty
+# We're using 'npx wrangler pages deploy' instead of 'npx wrangler deploy'
+# which doesn't require a wrangler.toml configuration
