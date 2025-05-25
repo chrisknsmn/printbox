@@ -25,7 +25,7 @@ export function createBoxHashKey(width: number, height: number, depth: number, b
 export function hashBoxes(boxes: THREE.Object3D[]): BoxHash {
   const boxHashes: BoxHash = {};
   
-  boxes.forEach((box, index) => {
+  boxes.forEach((box) => {
     if (box.userData && box.userData.dimensions) {
       const dims = box.userData.dimensions;
       const borderRadius = box.userData.borderRadius || 0;
@@ -94,7 +94,7 @@ export function generateManifest(boxHashes: BoxHash): string {
     return b[1].count - a[1].count;
   });
   
-  sortedBoxes.forEach(([hashKey, data], index) => {
+  sortedBoxes.forEach(([_, data], index) => {
     const {count, dimensions} = data;
     const filename = `box_${dimensions.width}x${dimensions.height}x${dimensions.depth}_mm.stl`;
     const volume = (dimensions.width * dimensions.height * dimensions.depth) / 1000; // mm³ to cm³
@@ -124,7 +124,7 @@ export async function createBoxExportZip(
   const zip = new JSZip();
   
   // Add each unique box as an STL file
-  Object.entries(boxHashes).forEach(([hashKey, data]) => {
+  Object.entries(boxHashes).forEach(([_, data]) => {
     const {dimensions, object} = data;
     const filename = `box_${dimensions.width}x${dimensions.height}x${dimensions.depth}_mm.stl`;
     
