@@ -1,3 +1,5 @@
-# This file is intentionally minimal
-# We're using Cloudflare Pages for static site deployment
 name = "printbox"
+compatibility_date = "2025-05-25"
+
+[assets]
+directory = "./out"

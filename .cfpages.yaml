@@ -19,5 +19,5 @@ cache:
 
 # Configure deployment
 deploy:
-  # Simple static site deployment
-  command: echo "Using Cloudflare Pages automatic deployment"
+  # Use the assets flag to deploy static assets
+  command: npx wrangler deploy --assets=./out
