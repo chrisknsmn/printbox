@@ -1,3 +1,5 @@
-# This file is intentionally left empty
-# We're using 'npx wrangler pages deploy' instead of 'npx wrangler deploy'
-# which doesn't require a wrangler.toml configuration
+name = "printbox"
+compatibility_date = "2025-05-25"
+
+[assets]
+directory = "./out"

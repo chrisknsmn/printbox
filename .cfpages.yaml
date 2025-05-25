@@ -19,5 +19,5 @@ cache:
 
 # Configure deployment
 deploy:
-  # Use the pages project deploy command
-  command: npx wrangler pages deploy out
+  # Use the assets flag to deploy static assets
+  command: npx wrangler deploy --assets=./out
