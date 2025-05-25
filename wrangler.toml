@@ -1,0 +1,8 @@
+name = "printbox"
+compatibility_date = "2025-05-25"
+
+# Static site assets configuration
+[site]
+bucket = "./out"
+
+# Use the --assets flag with wrangler deploy
