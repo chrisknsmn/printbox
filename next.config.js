@@ -8,9 +8,6 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // Ensure trailing slashes are handled correctly
-  trailingSlash: false,
-  
   // Disable ESLint during build to avoid deployment failures
   eslint: {
     // Warning: This skips ESLint checks during build
@@ -22,9 +19,6 @@ const nextConfig = {
     // Warning: This skips type checking during build
     ignoreBuildErrors: true,
   },
-  
-  // Ensure assets are loaded from the correct path
-  assetPrefix: '/',
   
   // App Router is now the default in Next.js 15.3.2
   // No experimental options needed

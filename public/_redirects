@@ -1,2 +1,2 @@
-# This file has been intentionally left empty
-# We're using Cloudflare's default handling instead
+# SPA fallback
+/*    /index.html   200
