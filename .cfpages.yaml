@@ -16,3 +16,9 @@ cache:
   directories:
     - node_modules
     - .next/cache
+
+# Configure deployment
+deploy:
+  # Use Cloudflare Pages' built-in static site deployment
+  # No need for custom deploy command as Pages will automatically
+  # deploy the output_directory contents

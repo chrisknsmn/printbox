@@ -1,0 +1,5 @@
+name = "printbox"
+compatibility_date = "2025-05-25"
+
+[site]
+bucket = "./out"
