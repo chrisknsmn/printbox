@@ -1,7 +1,9 @@
 name = "printbox"
 compatibility_date = "2025-05-25"
-main = "./index.js"
 
-# Static site configuration
+# Static site configuration for Pages
 [site]
 bucket = "./out"
+include = ["**/*"]
+exclude = []
+

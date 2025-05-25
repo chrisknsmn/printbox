@@ -16,3 +16,5 @@ cache:
   directories:
     - node_modules
     - .next/cache
+
+# No custom deploy command - let Cloudflare Pages handle deployment directly
