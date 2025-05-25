@@ -3,7 +3,7 @@ command = "npm run build"
 output = "out"
 
 [build.environment]
-NODE_VERSION = "20"
+NODE_VERSION = "22"
 
 [site]
 bucket = "./out"

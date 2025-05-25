@@ -11,10 +11,8 @@ const nextConfig = {
   // Ensure trailing slashes are handled correctly
   trailingSlash: true,
   
-  // Disable server components since we're using static export
-  experimental: {
-    appDir: true,
-  },
+  // App Router is now the default in Next.js 15.3.2
+  // No experimental options needed
 };
 
 module.exports = nextConfig;
