@@ -1,5 +1,6 @@
 name = "printbox"
 compatibility_date = "2025-05-25"
+main = "_worker.js"
 
-[assets]
-directory = "./out"
+[site]
+bucket = "./out"
