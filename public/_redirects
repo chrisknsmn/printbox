@@ -1,10 +1,2 @@
-# SPA fallback - use more specific rules first
-/api/*  /api/:splat  200
-/assets/*  /assets/:splat  200
-/_next/*  /_next/:splat  200
-
-# Only apply fallback to routes that don't exist as files
-/*  /index.html  200
-
-# Redirect www to non-www (uncomment if needed)
-# https://www.printbox.com/* https://printbox.com/:splat 301!
+# This file has been intentionally left empty
+# We're using Cloudflare's default handling instead
